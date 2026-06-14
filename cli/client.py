@@ -77,7 +77,7 @@ from backend.core.flag_detector import detect_flag, validate_flag
 from backend.memory.session_store import session_store
 from backend.memory.experience_db import experience_db
 
-BANNER = """\
+BANNER = r"""
 [bold cyan]  _____ _______ ______                      _   
  / ____|__   __|  ____/\                   | |  
 | |       | |  | |__ /  \   __ _  ___ _ __ | |_ 
@@ -85,7 +85,7 @@ BANNER = """\
 | |____   | |  | | / ____ \ (_| |  __/ | | | |_ 
  \_____|  |_|  |_|/_/    \_\__, |\___|_| |_|\__|
                             __/ |               
-                           |___/                 [/bold cyan]"""
+                           |___/                 [/bold cyan]"""[1:]
 
 TAGLINE = "[bold cyan]Autonomous CTF Solver  ·  LangGraph × NVIDIA NIM  ·  v1.0.0[/bold cyan]"
 
