@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+*.pyc
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.bak
+.DS_Store
+
+# Environment
+.env
+
+# Data & uploads
+uploads/
+data/experience.db
+
+# Node
+node_modules/
+.next/
