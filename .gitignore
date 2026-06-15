@@ -9,43 +9,21 @@ venv/
 env/
 *.pyc
 .pytest_cache/
-*.so
 
 # IDE
 .vscode/
 .idea/
 *.swp
-*.swo
 *.bak
-*~
 .DS_Store
-Thumbs.db
 
 # Environment
 .env
-.env.local
 
 # Data & uploads
 uploads/
 data/experience.db
-data/sessions.json
-
-# Logs
-*.log
-/tmp/ctfagent.log
-
-# OS artifacts
-.DS_Store
-Thumbs.db
 
 # Node
 node_modules/
 .next/
-
-# Docker
-docker-compose.override.yml
-
-# Runtime evidence
-*.evidence/
-*_*_[0-9]*.json
-*_*_[0-9]*.txt
