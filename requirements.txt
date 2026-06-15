@@ -21,7 +21,7 @@ selenium>=4.15.0
 
 # ─── Crypto Domain ───────────────────────────────────────
 pycryptodome>=3.20.0
-sympy>=1.12
+sympy>=1.14.0
 gmpy2>=2.1.5
 
 # ─── Forensics Domain ────────────────────────────────────
