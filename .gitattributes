@@ -1,0 +1,20 @@
+* text=auto eol=lf
+
+*.sh text eof=lf
+*.py text eof=lf
+*.md text eof=lf
+*.yml text eof=lf
+*.yaml text eof=lf
+*.json text eof=lf
+*.toml text eof=lf
+*.txt text eof=lf
+*.cfg text eof=lf
+*.ini text eof=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.svg binary
+*.ico binary
+*.db binary
+*.pyc binary
