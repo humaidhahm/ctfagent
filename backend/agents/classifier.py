@@ -58,6 +58,11 @@ async def classify_node(state: AgentState) -> dict:
         content = response.content.strip()
         content = content.replace("```json", "").replace("```", "").strip()
         parsed = json.loads(content)
+        valid_tools = set(list_tools())
+        recommended = [
+            tool for tool in parsed.get("recommended_tools", [])
+            if tool in valid_tools
+        ]
     except Exception as e:
         logger.error(f"Classification failed: {e}")
         return {
