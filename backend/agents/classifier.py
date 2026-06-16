@@ -65,9 +65,22 @@ async def classify_node(state: AgentState) -> dict:
         ]
     except Exception as e:
         logger.error(f"Classification failed: {e}")
+        manifest = state.get("manifest", {})
+        has_url = bool(manifest.get("target_url"))
+        has_remote = bool(manifest.get("target_host") and manifest.get("target_port"))
+        has_file = bool(manifest.get("attachments"))
+        raw_input_type = manifest.get("raw_input_type")
+        if has_url:
+            fallback_tools = ["curl_probe", "gobuster", "ffuf"]
+        elif has_remote:
+            fallback_tools = ["remote_connect", "session_read"]
+        elif has_file:
+            fallback_tools = ["file_reader", "encoding_detector", "strings_tool"]
+        else:
+            fallback_tools = ["encoding_detector", "binary_calc", "file_reader"]
         return {
             "category": "misc",
-            "recommended_toolchain": ["gobuster", "curl_probe"],
+            "recommended_toolchain": fallback_tools,
             "classification_reasoning": "Classification LLM error, defaulted to misc",
             "trace_events": [{
                 "event_type": "error",
