@@ -61,7 +61,7 @@ def agent_looper(state: AgentState) -> str:
         return "flag_validation"
     if state.get("iteration_count", 0) >= settings.max_agent_iterations:
         return "flag_validation"
-    return state.get("current_agent", "web_agent")
+    return state.get("current_agent", "misc_agent")
 
 
 async def flag_validation_node(state: AgentState) -> dict:
