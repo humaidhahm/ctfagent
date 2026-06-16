@@ -32,7 +32,17 @@ async def route_node(state: AgentState) -> dict:
     logger.info(f"Routing challenge: category={category}")
 
     if category not in CATEGORY_ROUTE:
-        return {"current_agent": target, "observations": [f"Category '{category}' defaulted to web agent"]}
+        logger.warning(f"Unknown category '{category}', retrying classifier before routing")
+        retry = await classify_node(state)
+        category = retry.get("category", "misc")
+        target = CATEGORY_ROUTE.get(category, "misc_agent")
+        return {
+            **retry,
+            "current_agent": target,
+            "observations": [f"Category '{state.get('category', 'unknown')}' reclassified as '{category}'"],
+        }
+
+    target = CATEGORY_ROUTE.get(category, "web_agent")
     return {"current_agent": target}
 
 
