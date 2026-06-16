@@ -6,6 +6,8 @@ from backend.core.nim_client import get_nim_llm
 from backend.core.state import AgentState
 from backend.memory.session_store import session_store
 from backend.memory.experience_db import experience_db
+from backend.agents.tool_registry import list_tools
+
 
 
 async def classify_node(state: AgentState) -> dict:
