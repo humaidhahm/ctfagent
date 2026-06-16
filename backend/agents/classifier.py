@@ -107,7 +107,7 @@ async def classify_node(state: AgentState) -> dict:
             "agent": "classifier",
             "data": {
                 "category": category,
-                "confidence": parsed.get("confidence", 0.0),
+                "confidence": max(0.0,min(1.0,parsed.get("confidence", 0.0))),
                 "reasoning": parsed.get("reasoning", ""),
                 "recommended_tools": parsed.get("recommended_tools", []),
             },
