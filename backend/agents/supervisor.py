@@ -30,7 +30,7 @@ CATEGORY_ROUTE = {
 async def route_node(state: AgentState) -> dict:
     category = state.get("category", "unknown")
     logger.info(f"Routing challenge: category={category}")
-    target = CATEGORY_ROUTE.get(category, "web_agent")
+
     if category not in CATEGORY_ROUTE:
         return {"current_agent": target, "observations": [f"Category '{category}' defaulted to web agent"]}
     return {"current_agent": target}
