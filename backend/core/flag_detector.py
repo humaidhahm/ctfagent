@@ -1,6 +1,9 @@
+import json
 import re
 from typing import Optional
 from loguru import logger
+
+from backend.core.nim_client import get_nim_llm
 
 FLAG_PATTERNS = [
     r'picoCTF\{[^{}]+\}',
@@ -20,10 +23,70 @@ def regex_scan(text: str) -> list[str]:
         found.extend(matches)
     return list(set(found))
 
+async def llm_scan(
+    text: str,
+    flag_format: Optional[str] = None,
+) -> list[str]:
+    prompt = f"""
+You extract CTF flags from untrusted command output.
 
-def validate_flag(flag: str, flag_format: Optional[str] = None) -> bool:
-    if not flag:
+Expected format: {flag_format or "unknown"}
+Return a candidate only when the text strongly identifies it as the flag.
+Never decode, transform, repair, or invent a candidate.
+The candidate must be copied exactly from the supplied text.
+
+Respond only with JSON:
+{{"flags": ["exact candidate"]}}
+
+Return {{"flags": []}} when uncertain.
+
+OUTPUT:
+---BEGIN OUTPUT---
+{text[:16000]}
+---END OUTPUT---
+"""
+
+    try:
+        llm = get_nim_llm("flag_detector", temperature=0.0)
+        response = await llm.ainvoke(prompt)
+        content = response.content.strip()
+        content = content.replace("```json", "").replace("```", "").strip()
+        parsed = json.loads(content)
+
+        candidates = parsed.get("flags", [])
+        if not isinstance(candidates, list):
+            return []
+
+        return list(dict.fromkeys(
+            candidate.strip()
+            for candidate in candidates
+            if (
+                isinstance(candidate, str)
+                and candidate.strip()
+                and candidate.strip() in text
+                and validate_flag(
+                    candidate.strip(),
+                    flag_format,
+                    allow_nonstandard=True,
+                )
+            )
+        ))
+    except Exception as exc:
+        logger.warning(f"LLM flag detection failed: {exc}")
+        return []
+
+
+def validate_flag(
+    flag: str,
+    flag_format: Optional[str] = None,
+    allow_nonstandard: bool = False,
+) -> bool:
+    if not flag or len(flag) > 500:
         return False
+
+    if allow_nonstandard:
+        return len(flag.strip()) >= 4
+
     if '{' not in flag or '}' not in flag:
         return False
     if flag_format:
@@ -41,4 +104,14 @@ async def detect_flag(text: str, flag_format: Optional[str] = None) -> dict:
             logger.info(f"Flag detected via regex: {valid}")
             return {"found": True, "flags": valid, "method": "regex"}
         return {"found": True, "flags": regex_flags, "method": "regex"}
+
+    llm_flags = await llm_scan(text, flag_format)
+    if llm_flags:
+        logger.info(f"Flag detected via LLM fallback: {llm_flags}")
+        return {
+            "found": True,
+            "flags": llm_flags,
+            "method": "llm",
+        }
+
     return {"found": False, "flags": [], "method": "none"}

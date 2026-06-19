@@ -48,6 +48,25 @@ _ARG_ALIASES: dict[str, str] = {
     "prime1": "p", "prime2": "q", "P": "p", "Q": "q",
 }
 
+_MAX_EXPANDED_DATA_LENGTH = 1_000_000
+
+
+def _expand_data_repeat(value) -> Optional[str]:
+    """Expand {"text": "...", "count": N} into a bounded string payload."""
+    if not isinstance(value, dict):
+        return None
+
+    text = value.get("text")
+    count = value.get("count")
+    if not isinstance(text, str) or isinstance(count, bool) or not isinstance(count, int):
+        return None
+    if not text or count < 0:
+        return None
+    if len(text) * count > _MAX_EXPANDED_DATA_LENGTH:
+        return None
+
+    return text * count
+
 
 def _normalize_tool_args(tool_name: str, raw_args: dict) -> dict:
     """Normalize LLM-generated arg names and strip unknowns."""
@@ -76,6 +95,14 @@ def _normalize_tool_args(tool_name: str, raw_args: dict) -> dict:
     for alias, target in _ARG_ALIASES.items():
         if alias in raw_args and target not in raw_args:
             raw_args[target] = raw_args.pop(alias)
+
+    # Compact representation for large payloads, e.g.
+    # {"data_repeat": {"text": "e", "count": 1751}} -> {"data": "eee..."}
+    # An explicit `data` value wins when both forms are supplied.
+    if "data_repeat" in raw_args:
+        repeated_data = _expand_data_repeat(raw_args.pop("data_repeat"))
+        if repeated_data is not None and "data" not in raw_args:
+            raw_args["data"] = repeated_data
 
     # Convert dict-valued `data` to URL-encoded string (LLM often passes
     # {"content": "{{7*7}}"} instead of "content={{7*7}}")
@@ -270,15 +297,21 @@ async def run_domain_agent(
         f"--- PAST EXPERIENCES ---\n{experience_hints if experience_hints else 'No past similar challenges in database yet.'}\n"
         f"Available tools: {', '.join(available_tools)}\n"
         f"Iteration: {iteration + 1}\n"
+        '\nWhen interacting with a remote challenge, send only the raw answer requested by the program.'
+        '\nDo not wrap input in shell commands such as echo, printf, python, or sh unless the remote prompt explicitly requests a shell command for picoCTF challenges.'
+        '\nExample: send {"data": "1751"} instead of {"data": "echo 1751"}.'
+        '\nFor repeated input, use {"data_repeat": {"text": "e", "count": 1751}} instead of {"data": "echo eeee..."}.'
+        '\n For picoCTF (generally having picoctf in the file or link name) challenges the flag is normally in the format picoCTF{flag} which is a good hint.'
     )
 
     if mode == "hint":
         prompt += "\nRespond with a single progressive hint. No JSON.\n"
     else:
         prompt += (
-            '\nGiven this context, what single tool should I call next and with what arguments?'
-            '\nRespond ONLY with valid JSON. Use the tool PARAMETER NAMES (like "filepath", "url", "ciphertext", "text", "n", "e", "c"), NOT CLI flags (like -f, -u, -c).'
-            '\nExample: {"tool": "exiftool_tool", "args": {"filepath": "/path/to/file"}, "reasoning": "Read metadata to find hidden info."}'
+             '\nGiven this context, what single tool should I call next and with what arguments?'
+             '\nRespond ONLY with valid JSON. Use the tool PARAMETER NAMES (like "filepath", "url", "ciphertext", "text", "n", "e", "c"), NOT CLI flags (like -f, -u, -c).'
+             '\nFor large repeated payloads, use "data_repeat": {"text": "<text>", "count": <integer>} instead of spelling out the full "data" string.'
+             '\nExample: {"tool": "exiftool_tool", "args": {"filepath": "/path/to/file"}, "reasoning": "Read metadata to find hidden info."}'
             '\n\nYour valid JSON:\n'
         )
 
@@ -500,12 +533,21 @@ async def run_domain_agent(
     )
     if flag_result["found"]:
         for flag in flag_result["flags"]:
-            if validate_flag(flag, manifest.get("flag_format")):
+            is_valid = validate_flag(
+                flag,
+                manifest.get("flag_format"),
+                allow_nonstandard=flag_result["method"] == "llm" and not manifest.get("flag_format"),
+            )
+
+            if is_valid:
                 new_candidate_flags.append(flag)
                 new_events.append({
                     "event_type": "flag_validated",
                     "agent": agent_name,
-                    "data": {"flag": flag, "method": flag_result["method"]},
+                    "data": {
+                        "flag": flag,
+                        "method": flag_result["method"],
+                    },
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "iteration": iteration,
                 })
@@ -522,7 +564,10 @@ async def run_domain_agent(
         new_events.append({
             "event_type": "flag_candidate",
             "agent": agent_name,
-            "data": {"flags": flag_result["flags"], "method": flag_result["method"]},
+            "data": {
+                "flags": flag_result["flags"],
+                "method": flag_result["method"],
+            },
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "iteration": iteration,
         })
