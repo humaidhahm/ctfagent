@@ -49,7 +49,7 @@ async def classify_node(state: AgentState) -> dict:
         f"Description:\n{description}\n\n"
         f"Attachments:\n{attachment_info if attachment_info else 'None'}\n"
         f"Target URL: {target_url or 'None'}\n\n"
-        "Respond ONLY with valid JSON in this exact format:\n"
+        "Respond ONLY with valid JSON (DO NOT SHOW THINKING) in this exact format:\n"
         '{\n  "category": "<one of the above>",\n  "confidence": <0.0-1.0>,\n'
         '  "reasoning": "<one sentence>",\n'
         '  "recommended_tools": ["<tool1>", "<tool2>", ...]\n}\n'
