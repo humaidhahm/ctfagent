@@ -7,6 +7,7 @@ from backend.core.nim_client import get_nim_llm
 
 FLAG_PATTERNS = [
     r'picoCTF\{[^{}]+\}',
+    r'picoCTF\{[^{}\r\n]+\}',
     r'(?<![A-Za-z0-9])CTF\{[^{}]+\}',
     r'flag\{[^{}]+\}',
     r'FLAG\{[^{}]+\}',
@@ -34,7 +35,9 @@ Expected format: {flag_format or "unknown"}
 Return a candidate only when the text strongly identifies it as the flag.
 Never decode, transform, repair, or invent a candidate.
 The candidate must be copied exactly from the supplied text.
-
+A valid PicoCTF flag must exactly match picoCTF{...}.
+Hostnames, URLs, ports, filenames, and challenge names are not flags.
+Return no candidate unless the braces are present.
 Respond only with JSON:
 {{"flags": ["exact candidate"]}}
 
