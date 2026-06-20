@@ -301,6 +301,9 @@ async def run_domain_agent(
         '\nDo not wrap input in shell commands such as echo, printf, python, or sh unless the remote prompt explicitly requests a shell command for picoCTF challenges.'
         '\nExample: send {"data": "1751"} instead of {"data": "echo 1751"}.'
         '\nFor repeated input, use {"data_repeat": {"text": "e", "count": 1751}} instead of {"data": "echo eeee..."}.'
+        '\nOutput exactly one valid JSON object.'
+        '\nDo not output thinking, analysis, markdown, or code fences.'
+        '\nUse JSON literals only: true, false, and null. Never use Python True, False, or None.'
         '\n For picoCTF (generally having picoctf in the file or link name) challenges the flag is normally in the format picoCTF{flag} which is a good hint.'
     )
 
