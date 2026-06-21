@@ -2,8 +2,7 @@ import json
 import re
 from typing import Optional
 from loguru import logger
-
-from backend.core.nim_client import get_nim_llm
+from backend.core.llm_client import get_llm
 
 FLAG_PATTERNS = [
     r'picoCTF\{[^{}]+\}',
@@ -50,7 +49,7 @@ OUTPUT:
 """
 
     try:
-        llm = get_nim_llm("flag_detector", temperature=0.0)
+        llm = get_llm("flag_detector", temperature=0.0)
         response = await llm.ainvoke(prompt)
         content = response.content.strip()
         content = content.replace("```json", "").replace("```", "").strip()

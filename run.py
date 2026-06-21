@@ -186,6 +186,143 @@ def p_error(msg):  print(f'  {C.CROSS} {C.RED}{msg}{C.NC}')
 
 # ─── Helpers ───────────────────────────────────────────────
 
+def get_env_value(content: str, name: str) -> str:
+    prefix = f"{name}="
+
+    for line in content.splitlines():
+        if line.startswith(prefix):
+            return line.split("=", 1)[1].strip()
+
+    return ""
+
+
+def set_env_value(content: str, name: str, value: str) -> str:
+    prefix = f"{name}="
+    lines = content.splitlines()
+    updated = False
+    result = []
+
+    for line in lines:
+        if line.startswith(prefix):
+            result.append(f"{name}={value}")
+            updated = True
+        else:
+            result.append(line)
+
+    if not updated:
+        result.append(f"{name}={value}")
+
+    return "\n".join(result).strip() + "\n"
+
+
+def read_key_pool(provider_name: str) -> list[str]:
+    while True:
+        raw_count = input(
+            f"  Number of {provider_name} API keys (0 to skip): "
+        ).strip()
+
+        try:
+            count = int(raw_count)
+            if count >= 0:
+                break
+        except ValueError:
+            pass
+
+        p_warn("Enter a non-negative number")
+
+    keys = []
+
+    for index in range(count):
+        while True:
+            key = input(
+                f"  {provider_name} API key {index + 1}/{count}: "
+            ).strip()
+
+            if key:
+                keys.append(key)
+                break
+
+            p_warn("API key cannot be empty")
+
+    return keys
+
+
+def configure_llm_keys(content: str) -> str:
+    google_keys = get_env_value(content, "GOOGLE_API_KEYS")
+    if not google_keys:
+        legacy_keys = [
+            get_env_value(content, "GEMMA_API_KEYS"),
+            get_env_value(content, "GEMINI_API_KEYS"),
+        ]
+        google_keys = ",".join(key for key in legacy_keys if key)
+        if google_keys:
+            content = set_env_value(
+                content,
+                "GOOGLE_API_KEYS",
+                google_keys,
+            )
+
+    nim_keys = get_env_value(content, "NVIDIA_NIM_API_KEYS")
+    if not nim_keys:
+        legacy_nim_key = get_env_value(content, "NVIDIA_NIM_API_KEY")
+        if legacy_nim_key and legacy_nim_key != "your_key_here":
+            nim_keys = legacy_nim_key
+            content = set_env_value(
+                content,
+                "NVIDIA_NIM_API_KEYS",
+                nim_keys,
+            )
+
+    if (
+        get_env_value(content, "LLM_KEYS_CONFIGURED") != "1"
+        or not (nim_keys or google_keys)
+    ):
+        nim_keys = read_key_pool("NVIDIA NIM")
+        google_keys = read_key_pool("Google AI (Gemma and Gemini)")
+
+        content = set_env_value(
+            content,
+            "NVIDIA_NIM_API_KEYS",
+            ",".join(nim_keys),
+        )
+        content = set_env_value(
+            content,
+            "GOOGLE_API_KEYS",
+            ",".join(google_keys),
+        )
+        content = set_env_value(
+            content,
+            "LLM_KEYS_CONFIGURED",
+            "1",
+        )
+
+    available = []
+
+    if get_env_value(content, "NVIDIA_NIM_API_KEYS"):
+        available.append("nim")
+    if get_env_value(content, "GOOGLE_API_KEYS"):
+        available.append("gemma")
+        available.append("gemini")
+
+    if not available:
+        raise RuntimeError("At least one LLM API key is required")
+
+    print("\n  Available LLM providers:")
+    for index, provider in enumerate(available, start=1):
+        print(f"  {index}. {provider.upper()}")
+
+    while True:
+        selection = input("  Choose LLM provider: ").strip()
+
+        try:
+            provider = available[int(selection) - 1]
+            break
+        except (ValueError, IndexError):
+            p_warn("Choose one of the displayed numbers")
+
+    content = set_env_value(content, "LLM_PROVIDER", provider)
+    return content
+
 def run_cmd(cmd, capture=False, check=False, timeout=120):
     try:
         result = subprocess.run(
@@ -428,6 +565,19 @@ def setup_environment():
             )
 
     content = ENV_FILE.read_text()
+    content = configure_llm_keys(content)
+    content = set_env_value(content, "GEMMA_MODEL", "gemma-4-31b-it")
+    content = set_env_value(
+        content,
+        "GEMINI_MODEL",
+        "gemini-3.1-flash-lite",
+    )
+    ENV_FILE.write_text(content)
+    p_ok(
+        f"LLM provider set to "
+        f"{get_env_value(content, 'LLM_PROVIDER').upper()}"
+    )
+
     if 'your_key_here' in content or 'NVIDIA_NIM_API_KEY=' not in content:
         print(f'\n  {C.YELLOW}╔══════════════════════════════════════════════════╗{C.NC}')
         print(f'  {C.YELLOW}║  NVIDIA NIM API Key Required                    ║{C.NC}')

@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 from loguru import logger
 
-from backend.core.nim_client import get_nim_llm
+from backend.core.llm_client import get_llm
 from backend.core.state import AgentState
 from backend.memory.session_store import session_store
 from backend.memory.experience_db import experience_db
@@ -11,7 +11,7 @@ from backend.agents.tool_registry import list_tools
 
 
 async def classify_node(state: AgentState) -> dict:
-    llm = get_nim_llm("classifier", temperature=0.0)
+    llm = get_llm("classifier", temperature=0.0)
 
     manifest = state.get("manifest", {})
     description = manifest.get("description", "")

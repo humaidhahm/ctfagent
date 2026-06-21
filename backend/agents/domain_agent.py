@@ -3,8 +3,7 @@ import inspect
 from datetime import datetime, timezone
 from typing import Optional
 from loguru import logger
-
-from backend.core.nim_client import get_nim_llm
+from backend.core.llm_client import get_llm
 from backend.core.state import AgentState
 from backend.core.flag_detector import detect_flag, validate_flag
 from backend.agents.tool_registry import get_tool
@@ -190,7 +189,7 @@ async def run_domain_agent(
     available_tools: list[str],
 ) -> dict:
     node_name = NODE_NAME_MAP.get(agent_name, agent_name)
-    llm = get_nim_llm(agent_name)
+    llm = get_llm(agent_name)
 
     manifest = state.get("manifest", {})
     description = manifest.get("description", "")
