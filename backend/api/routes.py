@@ -14,8 +14,7 @@ from backend.core.tool_checker import check_all_tools
 from backend.config.settings import settings
 from backend.agents.supervisor import supervisor_graph
 from backend.api.websocket import websocket_handler
-from backend.core.nim_client import get_nim_llm
-
+from backend.core.llm_client import get_llm
 router = APIRouter()
 
 _task_registry: list = []
@@ -166,7 +165,7 @@ async def get_writeup(session_id: str) -> dict:
     if not session.get("solved"):
         raise HTTPException(status_code=400, detail="Challenge not solved, no writeup available")
 
-    llm = get_nim_llm("supervisor", temperature=0.3)
+    llm = get_llm("supervisor", temperature=0.3)
     trace_str = json.dumps(session.get("trace_events", []), indent=2)[:4000]
 
     prompt = (

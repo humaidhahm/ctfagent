@@ -8,8 +8,46 @@ _ENV_PATH = str(_PROJECT_ROOT / ".env")
 
 
 class Settings(BaseSettings):
+    llm_provider: str = "nim"
+
+    # Comma-separated key pools
+    nvidia_nim_api_keys: str = ""
+    google_api_keys: str = ""
+
+    # Legacy names kept so existing .env files still work
+    gemma_api_keys: str = ""
+    gemini_api_keys: str = ""
+
+    # Keep old single-key configuration working
     nvidia_nim_api_key: str = ""
     nvidia_nim_base_url: str = "https://integrate.api.nvidia.com/v1"
+
+    gemma_model: str = "gemma-4-31b-it"
+    gemini_model: str = "gemini-3.1-flash-lite"
+
+    @staticmethod
+    def _split_keys(value: str) -> list[str]:
+        return [
+            key.strip()
+            for key in value.split(",")
+            if key.strip() and key.strip() != "your_key_here"
+        ]
+
+    @property
+    def nim_keys(self) -> list[str]:
+        keys = self._split_keys(self.nvidia_nim_api_keys)
+        if not keys and self.nvidia_nim_api_key:
+            keys = [self.nvidia_nim_api_key]
+        return keys
+
+    @property
+    def configured_google_keys(self) -> list[str]:
+        keys = self._split_keys(self.google_api_keys)
+        if not keys:
+            keys = self._split_keys(
+                ",".join((self.gemma_api_keys, self.gemini_api_keys))
+            )
+        return list(dict.fromkeys(keys))
 
     nim_models: dict[str, str] = {
         # Leave empty to let SmartLLM select based on load + speed
