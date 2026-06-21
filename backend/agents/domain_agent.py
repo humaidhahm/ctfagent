@@ -304,6 +304,7 @@ async def run_domain_agent(
         '\nDo not output thinking, analysis, markdown, or code fences.'
         '\nUse JSON literals only: true, false, and null. Never use Python True, False, or None.'
         '\n For picoCTF (generally having picoctf in the file or link name) challenges the flag is normally in the format picoCTF{flag} which is a good hint.'
+        "Never assume a command succeeded unless its output explicitly contains evidence. Only reason from observations returned by tools. If a command's output is absent or incomplete, state that the result is unknown."
     )
 
     if mode == "hint":

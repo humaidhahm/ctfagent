@@ -47,6 +47,46 @@ _pools = {
 _session_models: dict[str, str] = {}
 
 
+def _content_to_text(content: Any) -> str:
+    """Normalize LangChain string or structured content blocks to text."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                text = block.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+            else:
+                text = getattr(block, "text", None)
+                if isinstance(text, str):
+                    parts.append(text)
+        return "".join(parts)
+    return str(content)
+
+
+def _normalize_message_content(message: Any) -> Any:
+    """Return a message/chunk whose content is always a plain string."""
+    content = getattr(message, "content", None)
+    if isinstance(content, str):
+        return message
+
+    text = _content_to_text(content)
+    if hasattr(message, "model_copy"):
+        return message.model_copy(update={"content": text})
+
+    try:
+        message.content = text
+    except (AttributeError, TypeError):
+        pass
+    return message
+
+
 def _status_code(exc: Exception) -> Optional[int]:
     status = getattr(exc, "status_code", None)
     if isinstance(status, int):
@@ -164,7 +204,7 @@ class RotatingLLM:
                 )
 
                 self.pool.mark_success(api_key)
-                return result
+                return _normalize_message_content(result)
 
             except Exception as exc:
                 last_error = exc
@@ -208,7 +248,7 @@ class RotatingLLM:
                     **kwargs,
                 ):
                     emitted_output = True
-                    yield chunk
+                    yield _normalize_message_content(chunk)
 
                 self.pool.mark_success(api_key)
                 return
