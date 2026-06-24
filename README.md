@@ -14,23 +14,49 @@ AI-powered multi-agent CTF solver that autonomously solves Capture The Flag chal
 
 ## Quick Start
 
-### Docker (recommended for macOS, Windows, and non-Debian systems)
+### Docker (recommended for macOS and Windows without WSL/Linux)
 
-Docker is the easiest cross-platform way to run CTFAgent. The image includes the Debian/apt-based tools that CTFAgent needs, and the first interactive run prompts for your API keys/provider and writes configuration to `data/.env`.
+Use Docker if you are on macOS, on Windows without WSL2, or on a system where installing Linux CTF tools directly is inconvenient. The Docker image includes the Debian/apt-based tools that CTFAgent needs, including tools such as SQLMap, Gobuster, ffuf, binwalk, steghide, tshark, pwntools, ROPgadget, and zsteg.
+
+Install Docker Desktop first:
+
+- macOS: install Docker Desktop for Mac
+- Windows without WSL/Linux: install Docker Desktop for Windows and run these commands from PowerShell, Windows Terminal, Git Bash, or another terminal with Docker available
+
+Then run CTFAgent:
 
 ```bash
 git clone https://github.com/yourusername/ctfagent.git
 cd ctfagent
+mkdir -p data uploads
 docker compose --profile cli run --rm ctfagent
 ```
 
-To start the API after completing the interactive setup:
+The first interactive Docker run prompts for your API keys/provider and writes configuration to `data/.env`. That file is mounted into the container, so your setup persists across container rebuilds and restarts.
+
+To run the CLI again later:
+
+```bash
+docker compose --profile cli run --rm ctfagent
+```
+
+To start the API after completing the interactive CLI setup:
 
 ```bash
 docker compose --profile api up
 ```
 
+Then open:
+
+```text
+http://localhost:8000/docs
+```
+
+Both Docker services use Compose profiles, so `docker compose up` by itself will not start CTFAgent. Use `--profile cli` for the interactive solver or `--profile api` for the API server.
+
 ### Native Linux / WSL
+
+Use the native installer if you are on Linux or WSL2 and want CTFAgent installed directly on that environment.
 
 ```bash
 git clone https://github.com/yourusername/ctfagent.git
@@ -47,7 +73,7 @@ On first run, the installer will:
 
 ## Requirements
 
-- **Docker Desktop** for macOS, Windows, and non-Debian systems
+- **Docker Desktop** for macOS, Windows without WSL/Linux, and non-Debian systems
 - **Python 3.8+** for native Linux/WSL installs
 - **Linux** or WSL2 for native installs
 - **NVIDIA NIM API key** — get one free at [build.nvidia.com](https://build.nvidia.com/)

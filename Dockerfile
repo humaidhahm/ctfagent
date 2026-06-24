@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ruby \
     ruby-dev \
     build-essential \
+    cmake \
     && rm -rf /var/lib/apt/lists/*
 
 RUN gem install zsteg --no-document
