@@ -23,6 +23,7 @@ env/
 # Data & uploads
 uploads/
 data/experience.db
+data/sessions.json
 
 # Node
 node_modules/
