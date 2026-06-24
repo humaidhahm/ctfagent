@@ -4,7 +4,9 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_ENV_PATH = str(_PROJECT_ROOT / ".env")
+_ENV_PATH = str(
+    Path(os.environ.get("CTFAGENT_ENV_FILE", _PROJECT_ROOT / ".env")).expanduser()
+)
 
 
 class Settings(BaseSettings):

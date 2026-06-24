@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   ctfagent:
     build: .
@@ -6,25 +5,29 @@ services:
     container_name: ctfagent
     stdin_open: true
     tty: true
-    env_file: .env
+    environment:
+      CTFAGENT_DOCKER: "1"
+      CTFAGENT_ENV_FILE: /app/data/.env
     volumes:
+      - ./data:/app/data
       - ./uploads:/app/uploads
-      - /usr/share/wordlists:/usr/share/wordlists:ro
     ports:
       - "8000:8000"
-    command: ["python", "-m", "cli.client"]
+    command: ["python", "run.py", "--docker"]
     profiles: ["cli"]
 
   api:
     build: .
     image: ctfagent:latest
     container_name: ctfagent-api
-    env_file: .env
+    environment:
+      CTFAGENT_DOCKER: "1"
+      CTFAGENT_ENV_FILE: /app/data/.env
     ports:
       - "8000:8000"
-    command: >
-      sh -c "cd /app && python -c 'from backend.main import app; import uvicorn; uvicorn.run(app, host=\"0.0.0.0\", port=8000)'"
+    command: ["python", "run.py", "--docker-api"]
     volumes:
+      - ./data:/app/data
       - ./uploads:/app/uploads
       - /var/run/docker.sock:/var/run/docker.sock
     profiles: ["api"]

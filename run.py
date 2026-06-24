@@ -49,7 +49,7 @@ DOMAIN_COLORS = {
 BASE_DIR = Path(__file__).parent.resolve()
 VENV_DIR = BASE_DIR / '.venv'
 REQUIREMENTS = BASE_DIR / 'requirements.txt'
-ENV_FILE = BASE_DIR / '.env'
+ENV_FILE = Path(os.environ.get('CTFAGENT_ENV_FILE', BASE_DIR / '.env')).expanduser()
 ENV_EXAMPLE = BASE_DIR / '.env.example'
 
 # ─── Tool Database ─────────────────────────────────────────
@@ -555,6 +555,8 @@ def install_system_tools():
 def setup_environment():
     p_header('ENVIRONMENT CONFIGURATION')
 
+    ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
+
     if not ENV_FILE.exists():
         if ENV_EXAMPLE.exists():
             shutil.copy(ENV_EXAMPLE, ENV_FILE)
@@ -779,7 +781,43 @@ def check_root():
         else:
             p_warn('Not running as root and no sudo — many tools will fail to install')
 
+def run_docker_cli():
+    """Docker images already include dependencies; run only first-use config."""
+    p_header('DOCKER STARTUP')
+    check_python()
+    p_ok('Using dependencies baked into the Docker image')
+    p_info(f'Configuration file: {ENV_FILE}')
+    setup_environment()
+
+    from cli.client import main as cli_main
+    cli_main()
+
+
+def run_docker_api():
+    """Start the API container after configuration has been created."""
+    p_header('DOCKER API STARTUP')
+    check_python()
+    p_info(f'Configuration file: {ENV_FILE}')
+    if not ENV_FILE.exists():
+        p_error('Docker API configuration is missing.')
+        p_info('Run the interactive Docker CLI first: docker compose run --rm ctfagent')
+        sys.exit(1)
+
+    from backend.main import app
+    import uvicorn
+
+    uvicorn.run(app, host='0.0.0.0', port=8000)
+
+
 def main():
+    if '--docker' in sys.argv:
+        run_docker_cli()
+        return
+
+    if '--docker-api' in sys.argv:
+        run_docker_api()
+        return
+
     # Handle --install-only mode (called from CLI 'install' command via sudo)
     if '--install-only' in sys.argv:
         check_root()

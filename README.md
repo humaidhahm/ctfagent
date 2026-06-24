@@ -14,6 +14,24 @@ AI-powered multi-agent CTF solver that autonomously solves Capture The Flag chal
 
 ## Quick Start
 
+### Docker (recommended for macOS, Windows, and non-Debian systems)
+
+Docker is the easiest cross-platform way to run CTFAgent. The image includes the Debian/apt-based tools that CTFAgent needs, and the first interactive run prompts for your API keys/provider and writes configuration to `data/.env`.
+
+```bash
+git clone https://github.com/yourusername/ctfagent.git
+cd ctfagent
+docker compose --profile cli run --rm ctfagent
+```
+
+To start the API after completing the interactive setup:
+
+```bash
+docker compose --profile api up
+```
+
+### Native Linux / WSL
+
 ```bash
 git clone https://github.com/yourusername/ctfagent.git
 cd ctfagent
@@ -29,10 +47,11 @@ On first run, the installer will:
 
 ## Requirements
 
-- **Python 3.8+**
-- **Linux** (recommended) or WSL2 on Windows
+- **Docker Desktop** for macOS, Windows, and non-Debian systems
+- **Python 3.8+** for native Linux/WSL installs
+- **Linux** or WSL2 for native installs
 - **NVIDIA NIM API key** — get one free at [build.nvidia.com](https://build.nvidia.com/)
-- **sudo access** (for system tool installation)
+- **sudo access** for native system tool installation
 
 ## Usage
 
@@ -91,7 +110,9 @@ CLI (cli/client.py)
 
 ## Configuration
 
-Copy `.env.example` to `.env` and configure:
+Native setup writes `.env` in the project root. Docker setup writes `data/.env` so configuration persists across container rebuilds and recreations.
+
+You can also copy `.env.example` to the relevant env file and configure it manually:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
