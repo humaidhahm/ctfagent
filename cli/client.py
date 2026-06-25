@@ -18,8 +18,6 @@ from typing import Optional
 
 from dotenv import set_key
 from langchain_core.messages import SystemMessage, HumanMessage
-from pwnlib.flag.flag import env_file
-
 from backend.core.llm_client import get_llm
 
 
@@ -332,6 +330,9 @@ async def cmd_solve(args: str):
 
     flag_format = settings.flag_format or ""
     max_retries = 3
+    if flag_format == "" or flag_format.strip().lower() == "none":
+        flag_format = input("Error: Flag format not provided. Enter the flag format:")
+        set_key(".env", "FLAG_FORMAT", flag_format)
 
     for attempt in range(1, max_retries + 1):
         if attempt > 1:
@@ -381,7 +382,7 @@ async def cmd_solve(args: str):
                 break
         cat = initial_state.get("category", "?")
         diff = initial_state.get("difficulty") or "?"
-        flag_fmt = m.flag_format or settings.flag_format or ""
+        flag_fmt = m.flag_format or flag_format
         attachments_info = ""
         if m.attachments:
             names = ", ".join(a.filename for a in m.attachments)
@@ -981,7 +982,7 @@ def read_input_line() -> str:
 async def cmd_flagformat():
     flag_format = input("Enter the new flag format. Enter to skip.")
     if flag_format != "":
-        set_key(env_file,"FLAG_FORMAT",flag_format)
+        set_key(".env","FLAG_FORMAT",flag_format)
 
 
 async def run_interactive():

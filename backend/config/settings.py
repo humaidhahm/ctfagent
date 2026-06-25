@@ -72,7 +72,7 @@ class Settings(BaseSettings):
         "coordinator": "capable",
     }
 
-    flag_format: str = ""
+    flag_format: str = None
     max_agent_iterations: int = 20
     max_tool_timeout_seconds: int = 300
     agent_temperature: float = 0.1
