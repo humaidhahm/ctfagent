@@ -89,6 +89,10 @@ async def flag_validation_node(state: AgentState) -> dict:
 
     reason = state.get("failure_reason", "Unsolved - no flag found after all iterations")
     logger.info(f"Challenge unsolved: {reason}")
+    try:
+        experience_db.add_unsolved(state)
+    except Exception as e:
+        logger.warning(f"Failed to save to experience DB: {e}")
     return {
         "trace_events": [{
             "event_type": "completed",

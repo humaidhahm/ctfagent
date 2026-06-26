@@ -16,6 +16,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from backend.core.llm_client import get_llm
+
+
 def _extract_json(text: str) -> tuple[dict | None, str]:
     """Extract the first JSON object from text that may contain natural language prefix."""
     text = text.replace("```json", "").replace("```", "").strip()
@@ -292,10 +295,36 @@ def print_session_table(sessions: list[dict]):
     console.print(table)
 
 
+async def generate_challenge_name(description: str) -> str:
+    """Generate a short title for a CTF challenge."""
+    _name_llm = get_llm("supervisor", temperature=0)
+    prompt = f"""
+You are naming CTF challenges.
+
+Generate a concise title for the following challenge.
+
+Rules:
+- 2-5 words
+- Title Case
+- No quotes
+- No punctuation except hyphens if necessary
+- Return ONLY the title
+
+Challenge:
+{description[:3000]}
+"""
+
+    try:
+        response = await _name_llm.ainvoke(prompt)
+        return response.content.strip().splitlines()[0]
+    except Exception:
+        return "Unnamed Challenge"
+
+
 async def cmd_solve(args: str):
     """Solve a CTF challenge"""
     description = args.strip()
-
+    name = ""
     if not description:
         console.print("[yellow]Paste the challenge description (then press Enter twice):[/yellow]")
         desc_lines = []
@@ -332,8 +361,9 @@ async def cmd_solve(args: str):
 
         session_id = str(uuid.uuid4())
         console.print("[dim]Ingesting challenge...[/dim]")
-
+        name = await generate_challenge_name(description)
         manifest = await ingest_challenge(
+            name=name,
             description=description,
             upload_dir=settings.upload_dir,
             files=files,
@@ -364,6 +394,7 @@ async def cmd_solve(args: str):
         console.print()
         m = manifest
         title = m.title or ""
+        name = m.name or ""
         desc_first = m.description.strip().split("\n")[0][:100]
         pts = f"{m.points} pts" if m.points else ""
         auth = ""
@@ -618,6 +649,7 @@ async def cmd_benchmark():
         console.print(f"[dim]Challenge {i+1}/{len(known_challenges)}: {challenge['description'][:80]}...[/dim]")
 
         manifest = await ingest_challenge(
+            name=challenge["name"],
             description=challenge["description"],
             upload_dir=settings.upload_dir,
         )
@@ -766,35 +798,28 @@ async def cmd_install(args: str = ""):
 
     run_py = Path(__file__).resolve().parent.parent / 'run.py'
 
-    console.print("[dim]Installing tools (captured output)...[/dim]")
+    console.print("[dim]Installing tools...[/dim]")
 
-    def _run_install():
-        import subprocess as sp
-        if os.geteuid() == 0:
-            cmd = [sys.executable, str(run_py), '--install-only']
-        elif shutil.which('sudo'):
-            cmd = ['sudo', sys.executable, str(run_py), '--install-only']
-        else:
-            error_console.print("[red]Root privileges required.[/red] Run: [bold]sudo python3 run.py[/bold]")
-            return None
-        result = sp.run(cmd, capture_output=True, text=True, timeout=300)
-        return result
+    from run import run_install_only
 
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, _run_install)
+    try:
+        run_install_only()
 
-    if result is None:
-        return
+        console.print(
+            Panel(
+                "[green]✔ Installation complete![/green]",
+                border_style="green",
+            )
+        )
+    except Exception as e:
+        error_console.print(
+            Panel(
+                f"[red]✗ Installation failed:[/red]\n{e}",
+                border_style="red",
+            )
+        )
 
-    if result.stdout:
-        console.print(Panel(result.stdout[-1500:], border_style="dim", title="Installer Log"))
-    if result.stderr:
-        error_console.print(Panel(result.stderr[-500:], border_style="red", title="Errors"))
-
-    if result.returncode == 0:
-        console.print(Panel("[green]✔ Installation complete![/green]", border_style="green"))
-    else:
-        error_console.print(Panel(f"[red]✗ Installation exited with code {result.returncode}[/red]", border_style="red"))
+    print()  # Separate installer output from the final status.
 
 
 REPRESENTATIVE_TOOLS = {
@@ -917,11 +942,9 @@ def cmd_banner():
 
 def read_input_line() -> str:
     """Read input — single line or multi-line paste with append support."""
-    sys.stdout.write("\033[32m┃ ctfagent\033[0m\033[1m >\033[0m ")
-    sys.stdout.flush()
 
     try:
-        first = input()
+        first = input("\033[32m┃ ctfagent\033[0m\033[1m >\033[0m ")
     except (EOFError, KeyboardInterrupt):
         return ""
 
