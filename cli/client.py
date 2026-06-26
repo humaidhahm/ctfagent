@@ -910,11 +910,9 @@ def cmd_banner():
 
 def read_input_line() -> str:
     """Read input — single line or multi-line paste with append support."""
-    sys.stdout.write("\033[32m┃ ctfagent\033[0m\033[1m >\033[0m ")
-    sys.stdout.flush()
 
     try:
-        first = input()
+        first = input("\033[32m┃ ctfagent\033[0m\033[1m >\033[0m ")
     except (EOFError, KeyboardInterrupt):
         return ""
 
