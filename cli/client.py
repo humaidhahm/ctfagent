@@ -766,35 +766,28 @@ async def cmd_install(args: str = ""):
 
     run_py = Path(__file__).resolve().parent.parent / 'run.py'
 
-    console.print("[dim]Installing tools (captured output)...[/dim]")
+    console.print("[dim]Installing tools...[/dim]")
 
-    def _run_install():
-        import subprocess as sp
-        if os.geteuid() == 0:
-            cmd = [sys.executable, str(run_py), '--install-only']
-        elif shutil.which('sudo'):
-            cmd = ['sudo', sys.executable, str(run_py), '--install-only']
-        else:
-            error_console.print("[red]Root privileges required.[/red] Run: [bold]sudo python3 run.py[/bold]")
-            return None
-        result = sp.run(cmd, capture_output=True, text=True, timeout=300)
-        return result
+    from run import run_install_only
 
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, _run_install)
+    try:
+        run_install_only()
 
-    if result is None:
-        return
+        console.print(
+            Panel(
+                "[green]✔ Installation complete![/green]",
+                border_style="green",
+            )
+        )
+    except Exception as e:
+        error_console.print(
+            Panel(
+                f"[red]✗ Installation failed:[/red]\n{e}",
+                border_style="red",
+            )
+        )
 
-    if result.stdout:
-        console.print(Panel(result.stdout[-1500:], border_style="dim", title="Installer Log"))
-    if result.stderr:
-        error_console.print(Panel(result.stderr[-500:], border_style="red", title="Errors"))
-
-    if result.returncode == 0:
-        console.print(Panel("[green]✔ Installation complete![/green]", border_style="green"))
-    else:
-        error_console.print(Panel(f"[red]✗ Installation exited with code {result.returncode}[/red]", border_style="red"))
+    print()  # Separate installer output from the final status.
 
 
 REPRESENTATIVE_TOOLS = {
