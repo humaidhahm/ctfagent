@@ -411,8 +411,11 @@ def install_python_deps(python_exe):
         total = len(requirements)
 
         p_info(f"Installing {total} Python packages...")
-
-        for i, package in enumerate(requirements, 1):
+        packages = [
+            p for p in requirements
+            if not p.startswith("gem:")
+        ]
+        for i, package in enumerate(packages, 1):
             p_info(f"[{i}/{total}] {package}")
 
             r = run_cmd(
@@ -460,7 +463,10 @@ def install_python_deps(python_exe):
     pip_packages.update(extra_pkgs)
 
     packages = sorted(pip_packages)
-
+    packages = [
+        p for p in packages
+        if not p.startswith("gem:")
+    ]
     installed = 0
     already_installed = 0
     failed = []
