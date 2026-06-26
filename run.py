@@ -296,18 +296,12 @@ def configure_llm_keys(content: str) -> str:
             "1",
         )
 
-    available = []
-
-    if get_env_value(content, "NVIDIA_NIM_API_KEYS"):
-        available.append("nim")
-    if get_env_value(content, "GOOGLE_API_KEYS"):
-        available.append("gemma")
-        available.append("gemini")
+    available = ["nim","gemma","gemini"]
 
     if not available:
         raise RuntimeError("At least one LLM API key is required")
 
-    print("\n  Available LLM providers:")
+    print("\n  LLM providers:")
     for index, provider in enumerate(available, start=1):
         print(f"  {index}. {provider.upper()}")
 
@@ -320,6 +314,20 @@ def configure_llm_keys(content: str) -> str:
         except (ValueError, IndexError):
             p_warn("Choose one of the displayed numbers")
 
+    if not get_env_value(content, "NVIDIA_NIM_API_KEYS") and provider == "nim":
+        nim_keys = read_key_pool("NVIDIA NIM")
+        content = set_env_value(
+            content,
+            "NVIDIA_NIM_API_KEYS",
+            ",".join(nim_keys),
+        )
+    elif not get_env_value(content, "GOOGLE_API_KEYS") and (provider == "gemma" or provider == "gemini"):
+        google_keys = read_key_pool("Google AI (Gemma and Gemini)")
+        content = set_env_value(
+            content,
+            "GOOGLE_API_KEYS",
+            ",".join(google_keys),
+        )
     content = set_env_value(content, "LLM_PROVIDER", provider)
     return content
 
