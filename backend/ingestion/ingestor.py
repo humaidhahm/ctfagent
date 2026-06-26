@@ -29,6 +29,7 @@ async def compute_sha256(filepath: str) -> str:
 
 async def ingest_challenge(
     description: str,
+    name: str,
     upload_dir: str,
     files: Optional[list[tuple[str, bytes, str]]] = None,
     target_url: Optional[str] = None,
@@ -133,6 +134,7 @@ async def ingest_challenge(
     manifest = ChallengeManifest(
         challenge_id=challenge_id,
         title=title,
+        name=name,
         description=description,
         category=ChallengeCategory.UNKNOWN,
         attachments=attachments,

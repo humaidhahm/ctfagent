@@ -16,6 +16,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from backend.core.llm_client import get_llm
+
+
 def _extract_json(text: str) -> tuple[dict | None, str]:
     """Extract the first JSON object from text that may contain natural language prefix."""
     text = text.replace("```json", "").replace("```", "").strip()
@@ -292,10 +295,36 @@ def print_session_table(sessions: list[dict]):
     console.print(table)
 
 
+async def generate_challenge_name(description: str) -> str:
+    """Generate a short title for a CTF challenge."""
+    _name_llm = get_llm("supervisor", temperature=0)
+    prompt = f"""
+You are naming CTF challenges.
+
+Generate a concise title for the following challenge.
+
+Rules:
+- 2-5 words
+- Title Case
+- No quotes
+- No punctuation except hyphens if necessary
+- Return ONLY the title
+
+Challenge:
+{description[:3000]}
+"""
+
+    try:
+        response = await _name_llm.ainvoke(prompt)
+        return response.content.strip().splitlines()[0]
+    except Exception:
+        return "Unnamed Challenge"
+
+
 async def cmd_solve(args: str):
     """Solve a CTF challenge"""
     description = args.strip()
-
+    name = ""
     if not description:
         console.print("[yellow]Paste the challenge description (then press Enter twice):[/yellow]")
         desc_lines = []
@@ -332,8 +361,9 @@ async def cmd_solve(args: str):
 
         session_id = str(uuid.uuid4())
         console.print("[dim]Ingesting challenge...[/dim]")
-
+        name = await generate_challenge_name(description)
         manifest = await ingest_challenge(
+            name=name,
             description=description,
             upload_dir=settings.upload_dir,
             files=files,
@@ -364,6 +394,7 @@ async def cmd_solve(args: str):
         console.print()
         m = manifest
         title = m.title or ""
+        name = m.name or ""
         desc_first = m.description.strip().split("\n")[0][:100]
         pts = f"{m.points} pts" if m.points else ""
         auth = ""
@@ -618,6 +649,7 @@ async def cmd_benchmark():
         console.print(f"[dim]Challenge {i+1}/{len(known_challenges)}: {challenge['description'][:80]}...[/dim]")
 
         manifest = await ingest_challenge(
+            name=challenge["name"],
             description=challenge["description"],
             upload_dir=settings.upload_dir,
         )

@@ -12,6 +12,7 @@ from backend.config.settings import settings
 class ExperienceRecord:
     def __init__(
         self,
+        name: str,
         description: str,
         category: str,
         tools_used: list[dict],
@@ -27,6 +28,7 @@ class ExperienceRecord:
         workflow: str = None,
     ):
         self.id = record_id or str(uuid.uuid4())
+        self.name = name
         self.description = description
         self.category = category
         self.tools_used = tools_used
@@ -101,6 +103,7 @@ class ExperienceRecord:
     def to_dict(self) -> dict:
         return {
             "id": self.id,
+            "name": self.name,
             "description": self.description[:500],
             "category": self.category,
             "tools_used": [
@@ -121,6 +124,7 @@ class ExperienceRecord:
     @classmethod
     def from_dict(cls, d: dict) -> "ExperienceRecord":
         return cls(
+            name= d.get("name", ""),
             description=d.get("description", ""),
             category=d.get("category", ""),
             tools_used=d.get("tools_used", []),
@@ -192,6 +196,7 @@ class ExperienceDB:
 
     def add_solved(self, state: dict) -> ExperienceRecord:
         manifest = state.get("manifest", {})
+        name = manifest.get("name", "")
         description = manifest.get("description", "")
         category = state.get("category", "unknown")
         tool_history = state.get("tool_history", [])
@@ -202,6 +207,7 @@ class ExperienceDB:
         target_port = manifest.get("target_port")
 
         record = ExperienceRecord(
+            name=name,
             description=description,
             category=category,
             tools_used=tool_history,
@@ -216,6 +222,29 @@ class ExperienceDB:
         logger.info(f"Added solved challenge to experience DB: {record.id[:8]}")
         return record
 
+    def add_unsolved(self, state: dict) -> ExperienceRecord:
+        manifest = state.get("manifest", {})
+        name = manifest.get("name", "")
+        description = manifest.get("description", "")
+        category = state.get("category", "unknown")
+        tool_history = state.get("tool_history", [])
+        observations = state.get("observations", [])
+        target_host = manifest.get("target_host")
+        target_port = manifest.get("target_port")
+
+        record = ExperienceRecord(
+            name=name,
+            description=description,
+            category=category,
+            tools_used=tool_history,
+            observations=observations,
+            solved=False,
+            target_host=target_host,
+            target_port=target_port,
+        )
+        self.add_record(record)
+        logger.info(f"Added solved challenge to experience DB: {record.id[:8]}")
+        return record
     def find_similar(self, description: str, category: str = None, top_k: int = 5) -> list[tuple[ExperienceRecord, float]]:
         cache_key = f"{description[:100]}|{category}|{top_k}"
         cached = self._find_similar_cache.get(cache_key)
