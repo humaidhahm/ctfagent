@@ -1056,8 +1056,6 @@ async def run_interactive():
                 HumanMessage(content=cmd)
             ])
             print(response.content)
-            console.print("Use /help", style="bold cyan")
-            console.print(" for available commands.", style="red")
 
 
 def main():
