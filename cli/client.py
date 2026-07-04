@@ -16,6 +16,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from dotenv import set_key
+from langchain_core.messages import SystemMessage, HumanMessage
+from backend.core.llm_client import get_llm
+
+
 def _extract_json(text: str) -> tuple[dict | None, str]:
     """Extract the first JSON object from text that may contain natural language prefix."""
     text = text.replace("```json", "").replace("```", "").strip()
@@ -87,7 +92,7 @@ BANNER = r"""
                             __/ |               
                            |___/                 [/bold cyan]"""[1:]
 
-TAGLINE = "[bold cyan]Autonomous CTF Solver  ·  LangGraph × NVIDIA NIM  ·  v1.0.0[/bold cyan]"
+TAGLINE = "[bold cyan]Autonomous CTF Solver  ·  NVIDIA NIM x GEMMA 31B x GEMINI 3.1 Flash Lite  ·  v1.0.0[/bold cyan]"
 
 def print_help():
     """Print categorized help with Rich tables in a Panel."""
@@ -98,28 +103,28 @@ def print_help():
 
     help_items = [
         ("[green]CHALLENGES[/green]", "", ""),
-        ("solve", "<desc|file>", "Submit a CTF challenge to solve"),
-        ("sessions", "", "List all active sessions"),
-        ("view", "<id>", "View session details and trace"),
-        ("watch", "<id>", "Live-stream agent reasoning trace"),
-        ("writeup", "<id>", "Generate writeup for solved challenge"),
-        ("benchmark", "", "Run benchmark against known challenges"),
+        ("/solve", "<desc|file>", "Submit a CTF challenge to solve"),
+        ("/sessions", "", "List all active sessions"),
+        ("/view", "<id>", "View session details and trace"),
+        ("/watch", "<id>", "Live-stream agent reasoning trace"),
+        ("/writeup", "<id>", "Generate writeup for solved challenge"),
+        ("/benchmark", "", "Run benchmark against known challenges"),
         ("", "", ""),
         ("[green]EXPERIENCE[/green]", "", ""),
-        ("experience", "", "View/manage experience database"),
-        ("experience find", "<query>", "Search similar past challenges"),
-        ("experience clear", "", "Clear all experiences"),
+        ("/experience", "", "View/manage experience database"),
+        ("/experience_find", "<query>", "Search similar past challenges"),
+        ("/experience_clear", "", "Clear all experiences"),
         ("", "", ""),
         ("[green]TOOLS[/green]", "", ""),
-        ("tools", "", "Check all available security tools"),
-        ("tools", "<domain>", "Check tools for a domain (web, pwn, etc.)"),
-        ("install", "", "Install missing system tools (sudo)"),
-        ("install", "<domain>", "Install tools for a specific domain"),
+        ("/tools", "", "Check all available security tools"),
+        ("/tools", "<domain>", "Check tools for a domain (web, pwn, etc.)"),
+        ("/install", "", "Install missing system tools (sudo)"),
+        ("/install_", "<domain>", "Install tools for a specific domain"),
         ("", "", ""),
         ("[green]SYSTEM[/green]", "", ""),
-        ("banner", "", "Display the banner"),
-        ("clear", "", "Clear the screen"),
-        ("help", "", "Show this help message"),
+        ("/banner", "", "Display the banner"),
+        ("/clear", "", "Clear the screen"),
+        ("/help", "", "Show this help message"),
         ("exit / quit", "", "Exit CTFAgent"),
     ]
     for cmd, arg, desc in help_items:
@@ -325,6 +330,9 @@ async def cmd_solve(args: str):
 
     flag_format = settings.flag_format or ""
     max_retries = 3
+    if flag_format == "" or flag_format.strip().lower() == "none":
+        flag_format = input("Error: Flag format not provided. Enter the flag format:")
+        set_key(".env", "FLAG_FORMAT", flag_format)
 
     for attempt in range(1, max_retries + 1):
         if attempt > 1:
@@ -374,7 +382,7 @@ async def cmd_solve(args: str):
                 break
         cat = initial_state.get("category", "?")
         diff = initial_state.get("difficulty") or "?"
-        flag_fmt = m.flag_format or settings.flag_format or ""
+        flag_fmt = m.flag_format or flag_format
         attachments_info = ""
         if m.attachments:
             names = ", ".join(a.filename for a in m.attachments)
@@ -971,6 +979,12 @@ def read_input_line() -> str:
     return "\n".join(lines)
 
 
+async def cmd_flagformat():
+    flag_format = input("Enter the new flag format. Enter to skip.")
+    if flag_format != "":
+        set_key(".env","FLAG_FORMAT",flag_format)
+
+
 async def run_interactive():
     """Main interactive CLI loop"""
     cmd_banner()
@@ -991,55 +1005,57 @@ async def run_interactive():
         cmd = parts[0].lower()
         args = parts[1] if len(parts) > 1 else ""
 
-        if cmd in ("exit", "quit"):
+        if cmd in ("/exit", "/quit"):
             console.print("[dim]Shutting down CTFAgent...[/dim]")
             break
 
-        elif cmd == "help":
+        elif cmd == "/help":
             print_help()
 
-        elif cmd == "banner":
+        elif cmd == "/banner":
             cmd_banner()
 
-        elif cmd == "clear":
+        elif cmd == "/clear":
             os.system("clear" if os.name == "posix" else "cls")
             cmd_banner()
 
-        elif cmd == "solve":
+        elif cmd == "/solve":
             await cmd_solve(args)
 
-        elif cmd == "sessions":
+        elif cmd == "/sessions":
             await cmd_sessions()
 
-        elif cmd == "view":
+        elif cmd == "/view":
             await cmd_view(args)
 
-        elif cmd == "watch":
+        elif cmd == "/watch":
             await cmd_watch(args)
 
-        elif cmd == "writeup":
+        elif cmd == "/writeup":
             await cmd_writeup(args)
 
-        elif cmd == "benchmark":
+        elif cmd == "/benchmark":
             await cmd_benchmark()
 
-        elif cmd == "tools":
+        elif cmd == "/tools":
             await cmd_tools(args)
 
-        elif cmd == "install":
+        elif cmd == "/install":
             await cmd_install(args)
 
-        elif cmd == "experience":
+        elif cmd == "/experience":
             await cmd_experience(args)
+            
+        elif cmd == "/flagformat":
+            await cmd_flagformat()
 
         else:
             from rich.text import Text
-            t = Text("Unknown command: ", style="bold red")
-            t.append(cmd, style="bold white")
-            t.append(". Type ", style="red")
-            t.append("help", style="bold cyan")
-            t.append(" for available commands.", style="red")
-            error_console.print(t)
+            llm = get_llm("default")
+            response = await llm.ainvoke([
+                HumanMessage(content=cmd)
+            ])
+            print(response.content)
 
 
 def main():

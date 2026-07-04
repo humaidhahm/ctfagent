@@ -580,33 +580,6 @@ def setup_environment():
         f"{get_env_value(content, 'LLM_PROVIDER').upper()}"
     )
 
-    if 'your_key_here' in content or 'NVIDIA_NIM_API_KEY=' not in content:
-        print(f'\n  {C.YELLOW}╔══════════════════════════════════════════════════╗{C.NC}')
-        print(f'  {C.YELLOW}║  NVIDIA NIM API Key Required                    ║{C.NC}')
-        print(f'  {C.YELLOW}╚══════════════════════════════════════════════════╝{C.NC}')
-        print(f'\n  {C.DIM}Get your free key at: https://build.nvidia.com/{C.NC}')
-        print(f'  {C.DIM}(An NVIDIA API key is required to run CTFAgent){C.NC}')
-        print()
-        key = input(f'  {C.CYAN}▸{C.NC} Enter your NVIDIA NIM API Key: ').strip()
-        if key:
-            if 'NVIDIA_NIM_API_KEY=' in content:
-                lines = content.splitlines()
-                new_lines = []
-                for line in lines:
-                    if line.startswith('NVIDIA_NIM_API_KEY='):
-                        new_lines.append(f'NVIDIA_NIM_API_KEY={key}')
-                    else:
-                        new_lines.append(line)
-                content = '\n'.join(new_lines) + '\n'
-            else:
-                content += f'\nNVIDIA_NIM_API_KEY={key}\n'
-            ENV_FILE.write_text(content)
-            p_ok('API key saved to .env')
-        else:
-            p_warn('No key entered — you can set it later in .env')
-    else:
-        p_ok('.env exists with API key')
-
     flag_fmt = None
     for line in content.splitlines():
         if line.startswith('FLAG_FORMAT='):
