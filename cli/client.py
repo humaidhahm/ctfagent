@@ -18,7 +18,7 @@ from typing import Optional
 
 from dotenv import set_key
 from langchain_core.messages import SystemMessage, HumanMessage
-from backend.core.llm_client import get_llm
+from backend.core.llm_client import get_llm, RotatingLLM
 
 
 def _extract_json(text: str) -> tuple[dict | None, str]:
@@ -323,6 +323,62 @@ Challenge:
         return "Unnamed Challenge"
 
 
+async def edit_summary(summary: dict, user_request: str):
+    editor = RotatingLLM(
+        provider="gemini",
+        model_key="default",
+        temperature=0,
+    )
+    prompt = f"""
+    You are editing a structured CTF challenge summary.
+
+    Current summary:
+
+    {json.dumps(summary, indent=2)}
+
+    User request:
+
+    {user_request}
+
+    Rules:
+
+    - Only modify fields the user requested.
+    - Preserve everything else.
+    - Never invent information.
+    - Return ONLY valid JSON.
+    """
+
+    response = await editor.ainvoke(prompt)
+
+    return json.loads(response.content)
+
+def print_summary(summary: dict):
+    attachments = summary.get("attachments", [])
+
+    attachment_text = (
+        ", ".join(a.get("filename", str(a)) for a in attachments)
+        if attachments else "None"
+    )
+
+    body = (
+        f"[bold white]{summary.get('title') or summary.get('name') or 'Untitled'}[/bold white]\n\n"
+        f"[dim]Category:[/dim]      {summary.get('category', 'Unknown')}\n"
+        f"[dim]Difficulty:[/dim]    {summary.get('difficulty', 'Unknown')}\n"
+        f"[dim]Points:[/dim]        {summary.get('points', '-')}\n"
+        f"[dim]Target:[/dim]        {summary.get('target_url', '-')}\n"
+        f"[dim]Flag Format:[/dim]   [green]{summary.get('flag_format', '-')}[/green]\n"
+        f"[dim]Attachments:[/dim]   {attachment_text}\n\n"
+        f"[bold]Description[/bold]\n"
+        f"{summary.get('description', '').strip()}"
+    )
+
+    console.print(
+        Panel(
+            body,
+            title="[bold cyan]Challenge Summary[/bold cyan]",
+            border_style="cyan",
+        )
+    )
 async def cmd_solve(args: str):
     """Solve a CTF challenge"""
     description = args.strip()
@@ -416,6 +472,13 @@ async def cmd_solve(args: str):
             names = ", ".join(a.filename for a in m.attachments)
             attachments_info = f"\n[dim]Attachments:[/dim] {names}"
         url_info = f"\n[dim]Target:[/dim] [cyan]{m.target_url}[/cyan]" if m.target_url else ""
+        summary = {
+            "title": manifest.title,
+            "category": manifest.category,
+            "target": manifest.target_url,
+            "flag_format": manifest.flag_format or flag_format,
+            "description": manifest.description,
+        }
         console.print(Panel(
             f"[bold white]{title or desc_first}[/bold white]\n"
             f"{'[dim]by ' + auth + '[/dim]' if auth else ''}"
@@ -428,6 +491,21 @@ async def cmd_solve(args: str):
             border_style="cyan",
             title="[bold]Challenge Summary[/bold]",
         ))
+        console.print()
+
+        while True:
+            console.print(
+                "[cyan]Type 'continue' to solve, or describe anything you want to change.[/cyan]"
+            )
+
+            edit = input("> ").strip()
+
+            if edit.lower() in ("continue", "c", ""):
+                break
+
+            summary = await edit_summary(summary, edit)
+            print_summary(summary)
+
         console.print(f"[cyan]Session ID:[/cyan] {session_id}")
         console.print(f"[dim]Launching agent... streaming live trace below[/dim]\n")
 
