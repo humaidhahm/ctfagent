@@ -273,28 +273,6 @@ def configure_llm_keys(content: str) -> str:
                 nim_keys,
             )
 
-    if (
-        get_env_value(content, "LLM_KEYS_CONFIGURED") != "1"
-        or not (nim_keys or google_keys)
-    ):
-        nim_keys = read_key_pool("NVIDIA NIM")
-        google_keys = read_key_pool("Google AI (Gemma and Gemini)")
-
-        content = set_env_value(
-            content,
-            "NVIDIA_NIM_API_KEYS",
-            ",".join(nim_keys),
-        )
-        content = set_env_value(
-            content,
-            "GOOGLE_API_KEYS",
-            ",".join(google_keys),
-        )
-        content = set_env_value(
-            content,
-            "LLM_KEYS_CONFIGURED",
-            "1",
-        )
 
     available = ["nim","gemma","gemini"]
 
@@ -314,20 +292,21 @@ def configure_llm_keys(content: str) -> str:
         except (ValueError, IndexError):
             p_warn("Choose one of the displayed numbers")
 
-    if not get_env_value(content, "NVIDIA_NIM_API_KEYS") and provider == "nim":
-        nim_keys = read_key_pool("NVIDIA NIM")
-        content = set_env_value(
-            content,
-            "NVIDIA_NIM_API_KEYS",
-            ",".join(nim_keys),
-        )
-    elif not get_env_value(content, "GOOGLE_API_KEYS") and (provider == "gemma" or provider == "gemini"):
+    if not get_env_value(content, "GOOGLE_API_KEYS") and (provider == "gemma" or provider == "gemini"):
         google_keys = read_key_pool("Google AI (Gemma and Gemini)")
         content = set_env_value(
             content,
             "GOOGLE_API_KEYS",
             ",".join(google_keys),
         )
+    elif not get_env_value(content, "NVIDIA_NIM_API_KEYS") and provider == "nim":
+        nim_keys = read_key_pool("NVIDIA NIM")
+        content = set_env_value(
+            content,
+            "NVIDIA_NIM_API_KEYS",
+            ",".join(nim_keys),
+        )
+
     content = set_env_value(content, "LLM_PROVIDER", provider)
     return content
 

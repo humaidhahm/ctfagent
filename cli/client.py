@@ -1009,7 +1009,7 @@ async def run_interactive():
     """Main interactive CLI loop"""
     cmd_banner()
     await check_missing_tools()
-    console.print("[dim]Type [bold cyan]help[/bold cyan] for available commands. [bold cyan]exit[/bold cyan] to quit.[/dim]\n")
+    console.print("[dim]Type [bold cyan]/help[/bold cyan] for available commands. [bold cyan]exit[/bold cyan] to quit.[/dim]\n")
 
     while True:
         try:
