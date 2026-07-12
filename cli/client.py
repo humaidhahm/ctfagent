@@ -104,6 +104,7 @@ def print_help():
     help_items = [
         ("[green]CHALLENGES[/green]", "", ""),
         ("/solve", "<desc|file>", "Submit a CTF challenge to solve"),
+        ("/flag","FORMAT","Set the flag format"),
         ("/sessions", "", "List all active sessions"),
         ("/view", "<id>", "View session details and trace"),
         ("/watch", "<id>", "Live-stream agent reasoning trace"),
@@ -322,36 +323,6 @@ Challenge:
     except Exception:
         return "Unnamed Challenge"
 
-
-async def edit_summary(summary: dict, user_request: str):
-    editor = RotatingLLM(
-        provider="gemini",
-        model_key="default",
-        temperature=0,
-    )
-    prompt = f"""
-    You are editing a structured CTF challenge summary.
-
-    Current summary:
-
-    {json.dumps(summary, indent=2)}
-
-    User request:
-
-    {user_request}
-
-    Rules:
-
-    - Only modify fields the user requested.
-    - Preserve everything else.
-    - Never invent information.
-    - Return ONLY valid JSON.
-    """
-
-    response = await editor.ainvoke(prompt)
-
-    return json.loads(response.content)
-
 def print_summary(summary: dict):
     attachments = summary.get("attachments", [])
 
@@ -379,6 +350,70 @@ def print_summary(summary: dict):
             border_style="cyan",
         )
     )
+SUMMARY_FIELDS = [
+    ("title", "Title", False),
+    ("category", "Category", False),
+    ("difficulty", "Difficulty", False),
+    ("points", "Points", False),
+    ("target_url", "Target URL", False),
+    ("flag_format", "Flag Format", False),
+    ("description", "Description", True),
+]
+
+def edit_summary(summary: dict):
+    while True:
+        console.print("\n[bold]Editable Fields[/bold]\n")
+
+        for i, (_, label, _) in enumerate(SUMMARY_FIELDS, 1):
+            console.print(f"{i}. {label}")
+
+        console.print("0. Done")
+
+        choice = input("> ").strip()
+
+        if choice == "0":
+            return
+
+        if not choice.isdigit():
+            continue
+
+        idx = int(choice) - 1
+
+        if idx < 0 or idx >= len(SUMMARY_FIELDS):
+            continue
+
+        key, label, multiline = SUMMARY_FIELDS[idx]
+
+        console.print(f"\nCurrent {label}:\n")
+
+        print(summary.get(key, ""))
+
+        console.print()
+
+        if multiline:
+            value = read_multiline(f"New {label}:")
+        else:
+            value = input(f"New {label}: ")
+
+        summary[key] = value
+
+def read_multiline(prompt=""):
+    if prompt:
+        print(prompt)
+    print("(Finish by pressing Enter twice)\n")
+
+    lines = []
+
+    while True:
+        line = input()
+
+        if line == "":
+            break
+
+        lines.append(line)
+
+    return "\n".join(lines)
+
 async def cmd_solve(args: str):
     """Solve a CTF challenge"""
     description = args.strip()
@@ -456,7 +491,7 @@ async def cmd_solve(args: str):
         m = manifest
         title = m.title or ""
         name = m.name or ""
-        desc_first = m.description.strip().split("\n")[0][:100]
+        desc_first = m.description.strip().split("\n")[0][:1000]
         pts = f"{m.points} pts" if m.points else ""
         auth = ""
         for line in m.description.split("\n"):
@@ -493,18 +528,27 @@ async def cmd_solve(args: str):
         ))
         console.print()
 
+        summary = manifest.model_dump()
+
         while True:
+            print_summary(summary)
+
             console.print(
-                "[cyan]Type 'continue' to solve, or describe anything you want to change.[/cyan]"
+                "\n[E] Edit Summary    [C] Continue    [Q] Cancel"
             )
 
-            edit = input("> ").strip()
+            choice = input("> ").strip().lower()
 
-            if edit.lower() in ("continue", "c", ""):
+            if choice in ("c", "continue", ""):
                 break
 
-            summary = await edit_summary(summary, edit)
-            print_summary(summary)
+            if choice in ("q", "quit"):
+                return
+
+            if choice in ("e", "edit"):
+                edit_summary(summary)
+
+        manifest = manifest.model_validate(summary)
 
         console.print(f"[cyan]Session ID:[/cyan] {session_id}")
         console.print(f"[dim]Launching agent... streaming live trace below[/dim]\n")
@@ -1144,7 +1188,7 @@ async def run_interactive():
         elif cmd == "/experience":
             await cmd_experience(args)
             
-        elif cmd == "/flagformat":
+        elif cmd == "/flag":
             await cmd_flagformat()
 
         else:
