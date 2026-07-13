@@ -19,6 +19,7 @@ from typing import Optional
 from dotenv import set_key
 from langchain_core.messages import SystemMessage, HumanMessage
 from backend.core.llm_client import get_llm, RotatingLLM
+from run import configure_llm_keys, ENV_FILE
 
 
 def _extract_json(text: str) -> tuple[dict | None, str]:
@@ -105,6 +106,7 @@ def print_help():
         ("[green]CHALLENGES[/green]", "", ""),
         ("/solve", "<desc|file>", "Submit a CTF challenge to solve"),
         ("/flag","FORMAT","Set the flag format"),
+        ("/llm","","Configure LLMs"),
         ("/sessions", "", "List all active sessions"),
         ("/view", "<id>", "View session details and trace"),
         ("/watch", "<id>", "Live-stream agent reasoning trace"),
@@ -1176,6 +1178,10 @@ async def run_interactive():
             
         elif cmd == "/flag":
             await cmd_flagformat()
+
+        elif cmd == "/llm":
+            content = ENV_FILE.read_text()
+            content = configure_llm_keys(content,config=True)
 
         else:
             from rich.text import Text
