@@ -22,6 +22,9 @@ import shutil
 import textwrap
 from pathlib import Path
 
+from backend.config.settings import settings
+
+
 # ─── ANSI Colors ───────────────────────────────────────────
 class C:
     BOLD = '\033[1m'
@@ -247,7 +250,9 @@ def read_key_pool(provider_name: str) -> list[str]:
     return keys
 
 
-def configure_llm_keys(content: str) -> str:
+def configure_llm_keys(content: str,config=False) -> str:
+    if (os.getenv("LLM_PROVIDER") != "" or os.getenv("LLM_PROVIDER") != "YOUR_KEY_HERE") and config == False:
+        return content
     google_keys = get_env_value(content, "GOOGLE_API_KEYS")
     if not google_keys:
         legacy_keys = [
@@ -288,6 +293,8 @@ def configure_llm_keys(content: str) -> str:
 
         try:
             provider = available[int(selection) - 1]
+            os.environ["LLM_PROVIDER"] = provider
+            settings.llm_provider = provider
             break
         except (ValueError, IndexError):
             p_warn("Choose one of the displayed numbers")
