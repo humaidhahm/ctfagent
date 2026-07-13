@@ -22,7 +22,7 @@ env/
 
 # Data & uploads
 uploads/
-data/experience.db
+data/
 
 # Node
 node_modules/
