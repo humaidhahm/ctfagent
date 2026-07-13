@@ -487,7 +487,6 @@ async def cmd_solve(args: str):
 
         await session_store.create(session_id, initial_state)
 
-        console.print()
         m = manifest
         title = m.title or ""
         name = m.name or ""
@@ -514,20 +513,6 @@ async def cmd_solve(args: str):
             "flag_format": manifest.flag_format or flag_format,
             "description": manifest.description,
         }
-        console.print(Panel(
-            f"[bold white]{title or desc_first}[/bold white]\n"
-            f"{'[dim]by ' + auth + '[/dim]' if auth else ''}"
-            f"{'  ' + pts if pts else ''}"
-            f"\n"
-            f"[dim]Domain:[/dim] {cat}  [dim]Difficulty:[/dim] {diff}\n"
-            f"[dim]Flag format:[/dim] [green]{flag_fmt}[/green]"
-            f"{attachments_info}"
-            f"{url_info}",
-            border_style="cyan",
-            title="[bold]Challenge Summary[/bold]",
-        ))
-        console.print()
-
         summary = manifest.model_dump()
 
         while True:
@@ -536,8 +521,9 @@ async def cmd_solve(args: str):
             console.print(
                 "\n[E] Edit Summary    [C] Continue    [Q] Cancel"
             )
-
-            choice = input("> ").strip().lower()
+            while select.select([sys.stdin], [], [], 0)[0]:
+                sys.stdin.readline()
+            choice = sys.stdin.readline().strip().lower()
 
             if choice in ("c", "continue", ""):
                 break
