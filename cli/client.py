@@ -1182,7 +1182,6 @@ async def run_interactive():
         elif cmd == "/llm":
             content = ENV_FILE.read_text()
             content = configure_llm_keys(content,config=True)
-            console.print(settings.llm_provider)
 
         else:
             from rich.text import Text
