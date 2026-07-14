@@ -29,7 +29,8 @@ Then run CTFAgent:
 git clone https://github.com/yourusername/ctfagent.git
 cd ctfagent
 mkdir -p data uploads
-docker compose --profile cli run --rm ctfagent
+docker build -t ctfagent .
+docker run --rm -it ctfagent
 ```
 
 The first interactive Docker run prompts for your API keys/provider and writes configuration to `data/.env`. That file is mounted into the container, so your setup persists across container rebuilds and restarts.
@@ -37,7 +38,7 @@ The first interactive Docker run prompts for your API keys/provider and writes c
 To run the CLI again later:
 
 ```bash
-docker compose --profile cli run --rm ctfagent
+docker run --rm -it ctfagent
 ```
 
 To start the API after completing the interactive CLI setup:
@@ -52,7 +53,7 @@ Then open:
 http://localhost:8000/docs
 ```
 
-Both Docker services use Compose profiles, so `docker compose up` by itself will not start CTFAgent. Use `--profile cli` for the interactive solver or `--profile api` for the API server.
+The API service uses a Compose profile, so `docker compose up` by itself will not start it. Use `--profile api` for the API server.
 
 ### Native Linux / WSL
 
@@ -137,6 +138,12 @@ CLI (cli/client.py)
 ## Configuration
 
 Native setup writes `.env` in the project root. Docker setup writes `data/.env` so configuration persists across container rebuilds and recreations.
+
+For the Docker interactive CLI, attach stdin and a TTY:
+
+```bash
+docker run --rm -it ctfagent
+```
 
 You can also copy `.env.example` to the relevant env file and configure it manually:
 

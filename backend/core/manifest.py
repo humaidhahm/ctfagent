@@ -26,6 +26,7 @@ class FileAttachment(BaseModel):
 
 class ChallengeManifest(BaseModel):
     challenge_id: str
+    name: str
     title: Optional[str] = None
     description: str
     category: ChallengeCategory = ChallengeCategory.UNKNOWN
@@ -39,8 +40,9 @@ class ChallengeManifest(BaseModel):
     created_at: str = ""
 
     @classmethod
-    def create(cls, description: str, **kwargs) -> "ChallengeManifest":
+    def create(cls,name: str, description: str, **kwargs) -> "ChallengeManifest":
         return cls(
+            name=name,
             challenge_id=str(uuid.uuid4()),
             description=description,
             created_at=datetime.now(timezone.utc).isoformat(),

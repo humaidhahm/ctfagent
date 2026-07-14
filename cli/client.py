@@ -18,7 +18,8 @@ from typing import Optional
 
 from dotenv import set_key
 from langchain_core.messages import SystemMessage, HumanMessage
-from backend.core.llm_client import get_llm
+from backend.core.llm_client import get_llm, RotatingLLM
+from run import configure_llm_keys, ENV_FILE
 
 
 def _extract_json(text: str) -> tuple[dict | None, str]:
@@ -104,6 +105,8 @@ def print_help():
     help_items = [
         ("[green]CHALLENGES[/green]", "", ""),
         ("/solve", "<desc|file>", "Submit a CTF challenge to solve"),
+        ("/flag","FORMAT","Set the flag format"),
+        ("/llm","","Configure LLMs"),
         ("/sessions", "", "List all active sessions"),
         ("/view", "<id>", "View session details and trace"),
         ("/watch", "<id>", "Live-stream agent reasoning trace"),
@@ -297,10 +300,126 @@ def print_session_table(sessions: list[dict]):
     console.print(table)
 
 
+async def generate_challenge_name(description: str) -> str:
+    """Generate a short title for a CTF challenge."""
+    _name_llm = get_llm("supervisor", temperature=0)
+    prompt = f"""
+You are naming CTF challenges.
+
+Generate a concise title for the following challenge.
+
+Rules:
+- 2-5 words
+- Title Case
+- No quotes
+- No punctuation except hyphens if necessary
+- Return ONLY the title
+
+Challenge:
+{description[:3000]}
+"""
+
+    try:
+        response = await _name_llm.ainvoke(prompt)
+        return response.content.strip().splitlines()[0]
+    except Exception:
+        return "Unnamed Challenge"
+
+def print_summary(summary: dict):
+    attachments = summary.get("attachments", [])
+
+    attachment_text = (
+        ", ".join(a.get("filename", str(a)) for a in attachments)
+        if attachments else "None"
+    )
+
+    body = (
+        f"[bold white]{summary.get('title') or summary.get('name') or 'Untitled'}[/bold white]\n\n"
+        f"[dim]Category:[/dim]      {summary.get('category', 'Unknown')}\n"
+        f"[dim]Difficulty:[/dim]    {summary.get('difficulty', 'Unknown')}\n"
+        f"[dim]Points:[/dim]        {summary.get('points', '-')}\n"
+        f"[dim]Target:[/dim]        {summary.get('target_url', '-')}\n"
+        f"[dim]Flag Format:[/dim]   [green]{summary.get('flag_format', '-')}[/green]\n"
+        f"[dim]Attachments:[/dim]   {attachment_text}\n\n"
+        f"[bold]Description[/bold]\n"
+        f"{summary.get('description', '').strip()}"
+    )
+
+    console.print(
+        Panel(
+            body,
+            title="[bold cyan]Challenge Summary[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+SUMMARY_FIELDS = [
+    ("title", "Title", False),
+    ("category", "Category", False),
+    ("difficulty", "Difficulty", False),
+    ("points", "Points", False),
+    ("target_url", "Target URL", False),
+    ("flag_format", "Flag Format", False),
+    ("description", "Description", True),
+]
+
+def edit_summary(summary: dict):
+    while True:
+        console.print("\n[bold]Editable Fields[/bold]\n")
+
+        for i, (_, label, _) in enumerate(SUMMARY_FIELDS, 1):
+            console.print(f"{i}. {label}")
+
+        console.print("0. Done")
+
+        choice = input("> ").strip()
+
+        if choice == "0":
+            return
+
+        if not choice.isdigit():
+            continue
+
+        idx = int(choice) - 1
+
+        if idx < 0 or idx >= len(SUMMARY_FIELDS):
+            continue
+
+        key, label, multiline = SUMMARY_FIELDS[idx]
+
+        console.print(f"\nCurrent {label}:\n")
+
+        print(summary.get(key, ""))
+
+        console.print()
+
+        if multiline:
+            value = read_multiline(f"New {label}:")
+        else:
+            value = input(f"New {label}: ")
+
+        summary[key] = value
+
+def read_multiline(prompt=""):
+    if prompt:
+        print(prompt)
+    print("(Finish by pressing Enter twice)\n")
+
+    lines = []
+
+    while True:
+        line = input()
+
+        if line == "":
+            break
+
+        lines.append(line)
+
+    return "\n".join(lines)
+
 async def cmd_solve(args: str):
     """Solve a CTF challenge"""
     description = args.strip()
-
+    name = ""
     if not description:
         console.print("[yellow]Paste the challenge description (then press Enter twice):[/yellow]")
         desc_lines = []
@@ -340,8 +459,9 @@ async def cmd_solve(args: str):
 
         session_id = str(uuid.uuid4())
         console.print("[dim]Ingesting challenge...[/dim]")
-
+        name = await generate_challenge_name(description)
         manifest = await ingest_challenge(
+            name=name,
             description=description,
             upload_dir=settings.upload_dir,
             files=files,
@@ -369,10 +489,10 @@ async def cmd_solve(args: str):
 
         await session_store.create(session_id, initial_state)
 
-        console.print()
         m = manifest
         title = m.title or ""
-        desc_first = m.description.strip().split("\n")[0][:100]
+        name = m.name or ""
+        desc_first = m.description.strip().split("\n")[0][:1000]
         pts = f"{m.points} pts" if m.points else ""
         auth = ""
         for line in m.description.split("\n"):
@@ -388,18 +508,36 @@ async def cmd_solve(args: str):
             names = ", ".join(a.filename for a in m.attachments)
             attachments_info = f"\n[dim]Attachments:[/dim] {names}"
         url_info = f"\n[dim]Target:[/dim] [cyan]{m.target_url}[/cyan]" if m.target_url else ""
-        console.print(Panel(
-            f"[bold white]{title or desc_first}[/bold white]\n"
-            f"{'[dim]by ' + auth + '[/dim]' if auth else ''}"
-            f"{'  ' + pts if pts else ''}"
-            f"\n"
-            f"[dim]Domain:[/dim] {cat}  [dim]Difficulty:[/dim] {diff}\n"
-            f"[dim]Flag format:[/dim] [green]{flag_fmt}[/green]"
-            f"{attachments_info}"
-            f"{url_info}",
-            border_style="cyan",
-            title="[bold]Challenge Summary[/bold]",
-        ))
+        summary = {
+            "title": manifest.title,
+            "category": manifest.category,
+            "target": manifest.target_url,
+            "flag_format": manifest.flag_format or flag_format,
+            "description": manifest.description,
+        }
+        summary = manifest.model_dump()
+
+        while True:
+            print_summary(summary)
+
+            console.print(
+                "\n[E] Edit Summary    [C] Continue    [Q] Cancel"
+            )
+            while select.select([sys.stdin], [], [], 0)[0]:
+                sys.stdin.readline()
+            choice = sys.stdin.readline().strip().lower()
+
+            if choice in ("c", "continue", ""):
+                break
+
+            if choice in ("q", "quit"):
+                return
+
+            if choice in ("e", "edit"):
+                edit_summary(summary)
+
+        manifest = manifest.model_validate(summary)
+
         console.print(f"[cyan]Session ID:[/cyan] {session_id}")
         console.print(f"[dim]Launching agent... streaming live trace below[/dim]\n")
 
@@ -626,6 +764,7 @@ async def cmd_benchmark():
         console.print(f"[dim]Challenge {i+1}/{len(known_challenges)}: {challenge['description'][:80]}...[/dim]")
 
         manifest = await ingest_challenge(
+            name=challenge["name"],
             description=challenge["description"],
             upload_dir=settings.upload_dir,
         )
@@ -774,35 +913,28 @@ async def cmd_install(args: str = ""):
 
     run_py = Path(__file__).resolve().parent.parent / 'run.py'
 
-    console.print("[dim]Installing tools (captured output)...[/dim]")
+    console.print("[dim]Installing tools...[/dim]")
 
-    def _run_install():
-        import subprocess as sp
-        if os.geteuid() == 0:
-            cmd = [sys.executable, str(run_py), '--install-only']
-        elif shutil.which('sudo'):
-            cmd = ['sudo', sys.executable, str(run_py), '--install-only']
-        else:
-            error_console.print("[red]Root privileges required.[/red] Run: [bold]sudo python3 run.py[/bold]")
-            return None
-        result = sp.run(cmd, capture_output=True, text=True, timeout=300)
-        return result
+    from run import run_install_only
 
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, _run_install)
+    try:
+        run_install_only()
 
-    if result is None:
-        return
+        console.print(
+            Panel(
+                "[green]✔ Installation complete![/green]",
+                border_style="green",
+            )
+        )
+    except Exception as e:
+        error_console.print(
+            Panel(
+                f"[red]✗ Installation failed:[/red]\n{e}",
+                border_style="red",
+            )
+        )
 
-    if result.stdout:
-        console.print(Panel(result.stdout[-1500:], border_style="dim", title="Installer Log"))
-    if result.stderr:
-        error_console.print(Panel(result.stderr[-500:], border_style="red", title="Errors"))
-
-    if result.returncode == 0:
-        console.print(Panel("[green]✔ Installation complete![/green]", border_style="green"))
-    else:
-        error_console.print(Panel(f"[red]✗ Installation exited with code {result.returncode}[/red]", border_style="red"))
+    print()  # Separate installer output from the final status.
 
 
 REPRESENTATIVE_TOOLS = {
@@ -923,15 +1055,13 @@ def cmd_banner():
     console.print(Panel(BANNER, border_style="green", subtitle=TAGLINE, subtitle_align="center"))
 
 
-def read_input_line() -> str:
+def read_input_line() -> str | None:
     """Read input — single line or multi-line paste with append support."""
-    sys.stdout.write("\033[32m┃ ctfagent\033[0m\033[1m >\033[0m ")
-    sys.stdout.flush()
 
     try:
-        first = input()
+        first = input("\033[32m┃ ctfagent\033[0m\033[1m >\033[0m ")
     except (EOFError, KeyboardInterrupt):
-        return ""
+        return None
 
     if not first:
         return ""
@@ -989,13 +1119,18 @@ async def run_interactive():
     """Main interactive CLI loop"""
     cmd_banner()
     await check_missing_tools()
-    console.print("[dim]Type [bold cyan]help[/bold cyan] for available commands. [bold cyan]exit[/bold cyan] to quit.[/dim]\n")
+    console.print("[dim]Type [bold cyan]/help[/bold cyan] for available commands. [bold cyan]exit[/bold cyan] to quit.[/dim]\n")
 
     while True:
         try:
             inp = read_input_line()
         except (EOFError, KeyboardInterrupt):
             console.print("\n[yellow]✗ Interrupted[/yellow]")
+            break
+
+        if inp is None:
+            console.print("\n[dim]Input closed. Shutting down CTFAgent...[/dim]")
+            console.print("[dim]For Docker CLI usage, run: docker run --rm -it ctfagent[/dim]")
             break
 
         if not inp:
@@ -1046,8 +1181,12 @@ async def run_interactive():
         elif cmd == "/experience":
             await cmd_experience(args)
             
-        elif cmd == "/flagformat":
+        elif cmd == "/flag":
             await cmd_flagformat()
+
+        elif cmd == "/llm":
+            content = ENV_FILE.read_text()
+            content = configure_llm_keys(content,config=True)
 
         else:
             from rich.text import Text

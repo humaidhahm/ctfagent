@@ -12,6 +12,7 @@ class ToolCall(TypedDict):
 
 class AgentState(TypedDict):
     manifest: dict
+    name: str
     category: str
     recommended_toolchain: list[str]
     classification_reasoning: str

@@ -22,6 +22,9 @@ import shutil
 import textwrap
 from pathlib import Path
 
+from backend.config.settings import settings
+
+
 # ─── ANSI Colors ───────────────────────────────────────────
 class C:
     BOLD = '\033[1m'
@@ -247,7 +250,9 @@ def read_key_pool(provider_name: str) -> list[str]:
     return keys
 
 
-def configure_llm_keys(content: str) -> str:
+def configure_llm_keys(content: str,config=False) -> str:
+    if (os.getenv("LLM_PROVIDER") != "" or os.getenv("LLM_PROVIDER") != "YOUR_KEY_HERE") and config == False:
+        return content
     google_keys = get_env_value(content, "GOOGLE_API_KEYS")
     if not google_keys:
         legacy_keys = [
@@ -273,41 +278,13 @@ def configure_llm_keys(content: str) -> str:
                 nim_keys,
             )
 
-    if (
-        get_env_value(content, "LLM_KEYS_CONFIGURED") != "1"
-        or not (nim_keys or google_keys)
-    ):
-        nim_keys = read_key_pool("NVIDIA NIM")
-        google_keys = read_key_pool("Google AI (Gemma and Gemini)")
 
-        content = set_env_value(
-            content,
-            "NVIDIA_NIM_API_KEYS",
-            ",".join(nim_keys),
-        )
-        content = set_env_value(
-            content,
-            "GOOGLE_API_KEYS",
-            ",".join(google_keys),
-        )
-        content = set_env_value(
-            content,
-            "LLM_KEYS_CONFIGURED",
-            "1",
-        )
-
-    available = []
-
-    if get_env_value(content, "NVIDIA_NIM_API_KEYS"):
-        available.append("nim")
-    if get_env_value(content, "GOOGLE_API_KEYS"):
-        available.append("gemma")
-        available.append("gemini")
+    available = ["nim","gemma","gemini"]
 
     if not available:
         raise RuntimeError("At least one LLM API key is required")
 
-    print("\n  Available LLM providers:")
+    print("\n  LLM providers:")
     for index, provider in enumerate(available, start=1):
         print(f"  {index}. {provider.upper()}")
 
@@ -316,9 +293,26 @@ def configure_llm_keys(content: str) -> str:
 
         try:
             provider = available[int(selection) - 1]
+            os.environ["LLM_PROVIDER"] = provider
+            settings.llm_provider = provider
             break
         except (ValueError, IndexError):
             p_warn("Choose one of the displayed numbers")
+
+    if not get_env_value(content, "GOOGLE_API_KEYS") and (provider == "gemma" or provider == "gemini"):
+        google_keys = read_key_pool("Google AI (Gemma and Gemini)")
+        content = set_env_value(
+            content,
+            "GOOGLE_API_KEYS",
+            ",".join(google_keys),
+        )
+    elif not get_env_value(content, "NVIDIA_NIM_API_KEYS") and provider == "nim":
+        nim_keys = read_key_pool("NVIDIA NIM")
+        content = set_env_value(
+            content,
+            "NVIDIA_NIM_API_KEYS",
+            ",".join(nim_keys),
+        )
 
     content = set_env_value(content, "LLM_PROVIDER", provider)
     return content
@@ -397,15 +391,53 @@ def install_python_deps(python_exe):
     p_header('PYTHON DEPENDENCIES')
 
     if REQUIREMENTS.exists():
-        p_info('Installing from requirements.txt...')
-        r = run_cmd(
-            [python_exe, '-m', 'pip', 'install', '--quiet', '-r', str(REQUIREMENTS)],
-            timeout=180,
-        )
-        if r and r.returncode == 0:
-            p_ok('requirements.txt installed')
-        else:
-            p_warn('Some pip packages may have failed')
+        requirements = []
+
+        with open(REQUIREMENTS) as f:
+            for line in f:
+                line = line.strip()
+
+                if not line or line.startswith("#"):
+                    continue
+
+                requirements.append(line)
+
+        total = len(requirements)
+
+        p_info(f"Installing {total} Python packages...")
+        packages = [
+            p for p in requirements
+            if not p.startswith("gem:")
+        ]
+        for i, package in enumerate(packages, 1):
+            p_info(f"[{i}/{total}] {package}")
+
+            r = run_cmd(
+                [
+                    python_exe,
+                    "-m",
+                    "pip",
+                    "install",
+                    package,
+                ],capture=True,
+                timeout=180,
+            )
+
+            output = (r.stdout or "") + (r.stderr or "")
+
+            if r.returncode == 0:
+                if "Requirement already satisfied" in output:
+                    p_ok("Already installed")
+                else:
+                    p_ok("Installed")
+            else:
+                p_error("Failed")
+
+                # showing a concise reason
+                for line in reversed(output.splitlines()):
+                    if line.strip():
+                        print(f"    {line}")
+                        break
 
     # Install domain-specific pip packages
     pip_packages = set()
@@ -414,24 +446,75 @@ def install_python_deps(python_exe):
             pip_packages.add(pip_pkg)
 
     extra_pkgs = {
-        'requests', 'beautifulsoup4', 'pillow', 'matplotlib',
-        'jupyter', 'ipython', 'prompt-toolkit',
+        "requests",
+        "beautifulsoup4",
+        "pillow",
+        "matplotlib",
+        "jupyter",
+        "ipython",
+        "prompt-toolkit",
     }
     pip_packages.update(extra_pkgs)
 
-    p_info(f'Installing {len(pip_packages)} CTF Python packages...')
-    for pkg in pip_packages:
-        try:
-            __import__(pkg.replace('-', '_').replace('.', ''))
-            continue
-        except ImportError:
-            pass
+    packages = sorted(pip_packages)
+    packages = [
+        p for p in packages
+        if not p.startswith("gem:")
+    ]
+    installed = 0
+    already_installed = 0
+    failed = []
+
+    p_info(f"Installing {len(packages)} CTF Python packages...")
+
+    for i, pkg in enumerate(packages, 1):
+        p_info(f"[{i}/{len(packages)}] Installing {pkg}...")
+
         r = run_cmd(
-            [python_exe, '-m', 'pip', 'install', '--quiet', pkg],
+            [python_exe, "-m", "pip", "install", pkg],capture=True,
             timeout=120,
         )
 
-    p_ok('Python packages installed')
+        output = (r.stdout or "") + (r.stderr or "")
+
+        if r.returncode == 0:
+            if (
+                    "Requirement already satisfied" in output
+                    or "Already satisfied" in output
+            ):
+                p_info("  ✓ Already installed")
+                already_installed += 1
+            else:
+                p_info("  ✓ Installed")
+                installed += 1
+        else:
+            p_error("  ✗ Failed")
+            failed.append(pkg)
+
+            for line in reversed(output.splitlines()):
+                line = line.strip()
+                if line:
+                    p_error(f"    {line}")
+                    break
+
+            # Print the last meaningful error line
+            for line in reversed(output.splitlines()):
+                line = line.strip()
+                if line:
+                    p_error(f"    {line}")
+                    break
+
+    print()
+    p_info("Python package installation summary")
+    p_info(f"  ✓ Installed: {installed}")
+    p_info(f"  ✓ Already installed: {already_installed}")
+
+    if failed:
+        p_error(f"  ✗ Failed: {len(failed)}")
+        for pkg in failed:
+            p_error(f"    • {pkg}")
+    else:
+        p_info("  ✓ All packages installed successfully.")
 
 
 # ─── System Tools ──────────────────────────────────────────
@@ -727,7 +810,11 @@ def run_install_only():
         r = run_cmd([sys.executable, '-m', 'venv', str(VENV_DIR)], timeout=60)
         if r is None or r.returncode != 0:
             p_warn('Could not create venv; pip packages may fail')
+    venv_python = VENV_DIR / "bin" / "python3"
+    if not venv_python.exists():
+        venv_python = VENV_DIR / "bin" / "python"
 
+    install_python_deps(str(venv_python))
     install_system_tools()
     setup_environment()
     # Special: pwndbg
@@ -756,6 +843,12 @@ def check_root():
 
 def run_docker_cli():
     """Docker images already include dependencies; run only first-use config."""
+    if not sys.stdin.isatty():
+        p_error('Docker CLI needs an interactive terminal.')
+        p_info('Use: docker run --rm -it ctfagent')
+        p_info('Or:  docker compose run --rm ctfagent')
+        sys.exit(2)
+
     p_header('DOCKER STARTUP')
     check_python()
     p_ok('Using dependencies baked into the Docker image')

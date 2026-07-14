@@ -26,8 +26,8 @@ class CurlProbeTool(BaseTool):
                 else:
                     resp = await client.request(method, url, headers=headers, content=data)
 
-                body = resp.text[:3000]
-                if len(resp.text) > 3000:
+                body = resp.text[:30000]
+                if len(resp.text) > 30000:
                     body += "\n...[TRUNCATED]..."
 
                 # Auto-extract form fields from HTML to help LLM discover param names
