@@ -843,6 +843,12 @@ def check_root():
 
 def run_docker_cli():
     """Docker images already include dependencies; run only first-use config."""
+    if not sys.stdin.isatty():
+        p_error('Docker CLI needs an interactive terminal.')
+        p_info('Use: docker run --rm -it ctfagent')
+        p_info('Or:  docker compose run --rm ctfagent')
+        sys.exit(2)
+
     p_header('DOCKER STARTUP')
     check_python()
     p_ok('Using dependencies baked into the Docker image')

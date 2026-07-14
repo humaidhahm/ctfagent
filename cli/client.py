@@ -1055,13 +1055,13 @@ def cmd_banner():
     console.print(Panel(BANNER, border_style="green", subtitle=TAGLINE, subtitle_align="center"))
 
 
-def read_input_line() -> str:
+def read_input_line() -> str | None:
     """Read input — single line or multi-line paste with append support."""
 
     try:
         first = input("\033[32m┃ ctfagent\033[0m\033[1m >\033[0m ")
     except (EOFError, KeyboardInterrupt):
-        return ""
+        return None
 
     if not first:
         return ""
@@ -1126,6 +1126,11 @@ async def run_interactive():
             inp = read_input_line()
         except (EOFError, KeyboardInterrupt):
             console.print("\n[yellow]✗ Interrupted[/yellow]")
+            break
+
+        if inp is None:
+            console.print("\n[dim]Input closed. Shutting down CTFAgent...[/dim]")
+            console.print("[dim]For Docker CLI usage, run: docker run --rm -it ctfagent[/dim]")
             break
 
         if not inp:
