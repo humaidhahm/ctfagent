@@ -399,22 +399,39 @@ def edit_summary(summary: dict):
 
         summary[key] = value
 
+def _read_lines_until_double_blank(read_line) -> str:
+    lines = []
+    blank_count = 0
+
+    while True:
+        line = read_line()
+        if line is None:
+            break
+
+        stripped = line.rstrip("\n\r")
+        if stripped == "":
+            if lines:
+                blank_count += 1
+                if blank_count >= 2:
+                    break
+                lines.append("")
+            continue
+
+        blank_count = 0
+        lines.append(stripped)
+
+    while lines and lines[-1] == "":
+        lines.pop()
+
+    return "\n".join(lines)
+
+
 def read_multiline(prompt=""):
     if prompt:
         print(prompt)
     print("(Finish by pressing Enter twice)\n")
 
-    lines = []
-
-    while True:
-        line = input()
-
-        if line == "":
-            break
-
-        lines.append(line)
-
-    return "\n".join(lines)
+    return _read_lines_until_double_blank(input)
 
 async def cmd_solve(args: str):
     """Solve a CTF challenge"""
@@ -422,16 +439,13 @@ async def cmd_solve(args: str):
     name = ""
     if not description:
         console.print("[yellow]Paste the challenge description (then press Enter twice):[/yellow]")
-        desc_lines = []
-        while True:
+        def read_stdin_line():
             line = sys.stdin.readline()
             if not line:
-                break
-            stripped = line.rstrip("\n\r")
-            if stripped == "" and desc_lines:
-                break
-            desc_lines.append(stripped)
-        description = "\n".join(desc_lines)
+                return None
+            return line
+
+        description = _read_lines_until_double_blank(read_stdin_line)
 
     if not description.strip():
         console.print("[red]No challenge provided.[/red]")
