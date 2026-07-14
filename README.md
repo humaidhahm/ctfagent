@@ -66,11 +66,13 @@ python3 run.py
 ```
 
 On first run, the installer will:
-1. Create a Python virtual environment
-2. Install all Python dependencies
+1. Create a Python virtual environment (`.venv`) — this avoids the *"externally-managed-environment"* error on newer Debian/Ubuntu releases that block system-wide `pip` installs
+2. Install all Python dependencies inside the virtual environment
 3. Install missing system tools (requires sudo)
 4. Prompt you for your NVIDIA NIM API key
 5. Launch the interactive CLI
+
+> **Note:** If your system Python lacks `venv` support, install it first: `sudo apt install python3-venv`
 
 ## Requirements
 
