@@ -218,9 +218,6 @@ def _apply_tool_context_defaults(
     target_url = manifest.get("target_url")
     url_tools = {"curl_probe", "sqlmap", "gobuster", "ffuf", "download_file"}
 
-    if tool_name in url_tools and not tool_args.get("url") and target_url:
-        tool_args["url"] = target_url
-
     if (
         tool_name == "download_file"
         and not tool_args.get("url")
@@ -228,6 +225,9 @@ def _apply_tool_context_defaults(
         and "file_reader" in available_tools
     ):
         return "file_reader", {"filepath": tool_args["filepath"]}
+
+    if tool_name in url_tools and not tool_args.get("url") and target_url:
+        tool_args["url"] = target_url
 
     return tool_name, tool_args
 
@@ -510,6 +510,40 @@ async def run_domain_agent(
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "iteration": iteration,
     })
+
+    reasoning_flag_result = await detect_flag(
+        "\n".join(str(part) for part in (reasoning, content) if part),
+        manifest.get("flag_format"),
+    )
+    if reasoning_flag_result["found"]:
+        for flag in reasoning_flag_result["flags"]:
+            is_valid = validate_flag(
+                flag,
+                manifest.get("flag_format"),
+                allow_nonstandard=reasoning_flag_result["method"] == "llm" and not manifest.get("flag_format"),
+            )
+            if is_valid:
+                new_candidate_flags.append(flag)
+                new_events.append({
+                    "event_type": "flag_validated",
+                    "agent": agent_name,
+                    "data": {
+                        "flag": flag,
+                        "method": reasoning_flag_result["method"],
+                        "source": "llm_reasoning",
+                    },
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "iteration": iteration,
+                })
+                logger.info(f"Flag found and validated from LLM reasoning: {flag}")
+                return {
+                    "candidate_flags": new_candidate_flags,
+                    "final_flag": flag,
+                    "solved": True,
+                    "current_agent": "flag_validation",
+                    "trace_events": new_events,
+                    "current_hypothesis": reasoning,
+                }
 
     if tool_name not in available_tools:
         logger.warning(f"Agent {agent_name} requested unavailable tool: {tool_name}")
