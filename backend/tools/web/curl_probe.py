@@ -3,6 +3,15 @@ from backend.tools.base import BaseTool
 from loguru import logger
 
 
+def _prepare_headers(headers: dict | None, data: str | None) -> dict:
+    headers = headers or {}
+    if data and isinstance(data, str) and "=" in data:
+        has_content_type = any(k.lower() == "content-type" for k in headers)
+        if not has_content_type:
+            headers["Content-Type"] = "application/x-www-form-urlencoded"
+    return headers
+
+
 class CurlProbeTool(BaseTool):
     name = "curl_probe"
     description = "Send HTTP requests to probe endpoints"
@@ -12,7 +21,7 @@ class CurlProbeTool(BaseTool):
                   follow_redirects: bool = True) -> dict:
         if not url:
             return {"success": False, "output": "", "error": "No url provided", "command": "curl_probe"}
-        headers = headers or {}
+        headers = _prepare_headers(headers, data)
         try:
             async with httpx.AsyncClient(timeout=30.0, follow_redirects=follow_redirects) as client:
                 if method.upper() == "GET":
@@ -33,19 +42,20 @@ class CurlProbeTool(BaseTool):
                 # Auto-extract form fields from HTML to help LLM discover param names
                 import re
                 form_hint = ""
-                if "input" in body and "name=" in body:
-                    matches = re.findall(r'<input\s+[^>]*name="([^"]+)"', body, re.IGNORECASE)
+                if "input" in body.lower() and "name=" in body.lower():
+                    matches = re.findall(r"""<input\s+[^>]*name=["']([^"']+)["']""", body, re.IGNORECASE)
                     if matches:
                         form_hint = "\n[DETECTED FORM FIELDS]: " + ", ".join(matches)
-                    actions = re.findall(r'<form\s+[^>]*action="([^"]*)"', body, re.IGNORECASE)
-                    methods = re.findall(r'<form\s+[^>]*method="([^"]*)"', body, re.IGNORECASE)
+                    actions = re.findall(r"""<form\s+[^>]*action=["']([^"']*)["']""", body, re.IGNORECASE)
+                    methods = re.findall(r"""<form\s+[^>]*method=["']([^"']*)["']""", body, re.IGNORECASE)
                     if actions:
                         form_hint += f"\n[DETECTED FORM ACTION]: {actions[0]}"
                     if methods:
                         form_hint += f"\n[DETECTED FORM METHOD]: {methods[0].upper()}"
                     # Auto-test SSTI with detected form fields
                     if matches and method.upper() == "GET":
-                        target_url = url.rstrip("/") + "/" + actions[0].lstrip("/") if actions else url
+                        from urllib.parse import urljoin
+                        target_url = urljoin(url, actions[0]) if actions else url
                         ssti_payload = matches[0] + "={{7*7}}"
                         try:
                             async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as probe_client:
@@ -58,7 +68,7 @@ class CurlProbeTool(BaseTool):
 
                 result = {
                     "success": resp.status_code < 500,
-                    "output": f"Status: {resp.status_code}\nHeaders: {dict(resp.headers)}\n\nBody:\n{body}{form_hint}",
+                    "output": f"Status: {resp.status_code}\nHeaders: {dict(resp.headers)}\n{form_hint}\n\nBody:\n{body}",
                     "error": "",
                     "command": f"{method} {url}",
                     "status_code": resp.status_code,

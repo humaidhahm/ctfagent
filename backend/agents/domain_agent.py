@@ -1,4 +1,5 @@
 import json
+import ast
 import inspect
 from datetime import datetime, timezone
 from typing import Optional
@@ -169,6 +170,66 @@ def _filter_tool_args(tool_instance, args: dict) -> dict:
         return {k: v for k, v in args.items() if k in valid}
     except (ValueError, TypeError):
         return args
+
+
+def _parse_tool_response(content: str) -> dict:
+    """Parse a model tool response as strict JSON, with a Python-literal fallback."""
+    clean = _extract_first_json(content)
+    try:
+        return json.loads(clean)
+    except json.JSONDecodeError:
+        return ast.literal_eval(clean)
+
+
+def _tool_call_signature(tool_name: str, tool_args: dict) -> str:
+    """Stable signature for comparing repeated tool experiments."""
+    return json.dumps(
+        {"tool": tool_name, "args": tool_args},
+        sort_keys=True,
+        default=str,
+    )
+
+
+def _consecutive_identical_calls(
+    tool_history: list[dict],
+    tool_name: str,
+    tool_args: dict,
+) -> int:
+    """Count immediately previous calls with the same tool and same arguments."""
+    signature = _tool_call_signature(tool_name, tool_args)
+    count = 0
+    for call in reversed(tool_history):
+        if _tool_call_signature(
+            call.get("tool_name", ""),
+            call.get("tool_input", {}),
+        ) != signature:
+            break
+        count += 1
+    return count
+
+
+def _apply_tool_context_defaults(
+    tool_name: str,
+    tool_args: dict,
+    manifest: dict,
+    available_tools: list[str],
+) -> tuple[str, dict]:
+    """Fill obvious missing args from challenge context and repair common tool mixups."""
+    target_url = manifest.get("target_url")
+    url_tools = {"curl_probe", "sqlmap", "gobuster", "ffuf", "download_file"}
+
+    if (
+        tool_name == "download_file"
+        and not tool_args.get("url")
+        and tool_args.get("filepath")
+        and "file_reader" in available_tools
+    ):
+        return "file_reader", {"filepath": tool_args["filepath"]}
+
+    if tool_name in url_tools and not tool_args.get("url") and target_url:
+        tool_args["url"] = target_url
+
+    return tool_name, tool_args
 
 
 NODE_NAME_MAP = {
@@ -398,26 +459,36 @@ async def run_domain_agent(
         }
 
     try:
-        # Extract first JSON object (handles trailing natural language)
-        clean = _extract_first_json(content)
-        parsed = json.loads(clean)
+        parsed = _parse_tool_response(content)
         tool_name = parsed.get("tool", "")
         tool_args = parsed.get("args", {})
         reasoning = parsed.get("reasoning", "")
         # Normalize & filter args immediately (before trace event uses them)
         tool_args = _normalize_tool_args(tool_name, tool_args)
-    except json.JSONDecodeError:
+        tool_name, tool_args = _apply_tool_context_defaults(
+            tool_name,
+            tool_args,
+            manifest,
+            available_tools,
+        )
+    except (json.JSONDecodeError, ValueError, SyntaxError):
         logger.warning(f"LLM response not valid JSON for {agent_name}: {content[:200]}")
         # Try to fix common LLM escaping issues: \\\" -> \", \n -> newline, etc.
         try:
             fixed = content.replace("\\\"", "\"")
-            parsed = json.loads(fixed)
+            parsed = _parse_tool_response(fixed)
             tool_name = parsed.get("tool", "")
             tool_args = parsed.get("args", {})
             reasoning = parsed.get("reasoning", "")
             tool_args = _normalize_tool_args(tool_name, tool_args)
+            tool_name, tool_args = _apply_tool_context_defaults(
+                tool_name,
+                tool_args,
+                manifest,
+                available_tools,
+            )
             logger.info(f"Fixed JSON parsing with escape cleanup for {agent_name}")
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, ValueError, SyntaxError):
             new_observations.append(f"LLM returned invalid JSON. Try again. Raw: {content[:200]}")
             return {
                 "observations": new_observations,
@@ -439,6 +510,40 @@ async def run_domain_agent(
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "iteration": iteration,
     })
+
+    reasoning_flag_result = await detect_flag(
+        "\n".join(str(part) for part in (reasoning, content) if part),
+        manifest.get("flag_format"),
+    )
+    if reasoning_flag_result["found"]:
+        for flag in reasoning_flag_result["flags"]:
+            is_valid = validate_flag(
+                flag,
+                manifest.get("flag_format"),
+                allow_nonstandard=reasoning_flag_result["method"] == "llm" and not manifest.get("flag_format"),
+            )
+            if is_valid:
+                new_candidate_flags.append(flag)
+                new_events.append({
+                    "event_type": "flag_validated",
+                    "agent": agent_name,
+                    "data": {
+                        "flag": flag,
+                        "method": reasoning_flag_result["method"],
+                        "source": "llm_reasoning",
+                    },
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "iteration": iteration,
+                })
+                logger.info(f"Flag found and validated from LLM reasoning: {flag}")
+                return {
+                    "candidate_flags": new_candidate_flags,
+                    "final_flag": flag,
+                    "solved": True,
+                    "current_agent": "flag_validation",
+                    "trace_events": new_events,
+                    "current_hypothesis": reasoning,
+                }
 
     if tool_name not in available_tools:
         logger.warning(f"Agent {agent_name} requested unavailable tool: {tool_name}")
@@ -465,12 +570,13 @@ async def run_domain_agent(
         "iteration": iteration,
     })
 
-    # Hard loop breaker: if same tool called 4+ times in a row, force a strategy change
-    last_tool_names = [t.get("tool_name") for t in tool_history[-5:]] + [tool_name]
-    if len(last_tool_names) >= 4 and len(set(last_tool_names[-4:])) == 1:
-        logger.warning(f"Loop detected: {tool_name} called {len(last_tool_names[-4:])} times in a row")
+    # Hard loop breaker: reject repeated identical experiments, not useful retries
+    # with new arguments.
+    identical_call_count = _consecutive_identical_calls(tool_history, tool_name, tool_args)
+    if identical_call_count >= 3:
+        logger.warning(f"Loop detected: {tool_name} called {identical_call_count + 1} times with identical args")
         return {
-            "observations": [f"❌ {tool_name} has been called {len(last_tool_names[-4:])} times without success. The current approach is NOT working. You MUST try a different tool or a completely different approach NOW."],
+            "observations": [f"{tool_name} has been called {identical_call_count + 1} times with the same arguments. The current approach is NOT working. You MUST try different arguments, a different tool, or a completely different approach NOW."],
             "iteration_count": iteration + 1,
             "current_agent": node_name,
             "current_hypothesis": f"Strategy rejected: {tool_name} loop. Need different approach.",

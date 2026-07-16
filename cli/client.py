@@ -83,6 +83,12 @@ from backend.core.flag_detector import detect_flag, validate_flag
 from backend.memory.session_store import session_store
 from backend.memory.experience_db import experience_db
 
+
+def set_default_flag_format(flag_format: str) -> None:
+    set_key(str(ENV_FILE), "FLAG_FORMAT", flag_format)
+    settings.flag_format = flag_format
+
+
 BANNER = r"""
 [bold cyan]  _____ _______ ______                      _   
  / ____|__   __|  ____/\                   | |  
@@ -399,22 +405,52 @@ def edit_summary(summary: dict):
 
         summary[key] = value
 
+def _stdin_has_pending_input() -> bool:
+    try:
+        return bool(select.select([sys.stdin], [], [], 0)[0])
+    except (OSError, ValueError):
+        return False
+
+
+def _read_lines_until_double_blank(read_line, has_pending_input=None) -> str:
+    has_pending_input = has_pending_input or (lambda: False)
+    lines = []
+    blank_count = 0
+
+    while True:
+        line = read_line()
+        if line is None:
+            break
+
+        stripped = line.rstrip("\n\r")
+        if stripped == "":
+            if has_pending_input():
+                if lines:
+                    lines.append("")
+                blank_count = 0
+                continue
+            if lines:
+                blank_count += 1
+                if blank_count >= 2:
+                    break
+                lines.append("")
+            continue
+
+        blank_count = 0
+        lines.append(stripped)
+
+    while lines and lines[-1] == "":
+        lines.pop()
+
+    return "\n".join(lines)
+
+
 def read_multiline(prompt=""):
     if prompt:
         print(prompt)
     print("(Finish by pressing Enter twice)\n")
 
-    lines = []
-
-    while True:
-        line = input()
-
-        if line == "":
-            break
-
-        lines.append(line)
-
-    return "\n".join(lines)
+    return _read_lines_until_double_blank(input, _stdin_has_pending_input)
 
 async def cmd_solve(args: str):
     """Solve a CTF challenge"""
@@ -422,16 +458,13 @@ async def cmd_solve(args: str):
     name = ""
     if not description:
         console.print("[yellow]Paste the challenge description (then press Enter twice):[/yellow]")
-        desc_lines = []
-        while True:
+        def read_stdin_line():
             line = sys.stdin.readline()
             if not line:
-                break
-            stripped = line.rstrip("\n\r")
-            if stripped == "" and desc_lines:
-                break
-            desc_lines.append(stripped)
-        description = "\n".join(desc_lines)
+                return None
+            return line
+
+        description = _read_lines_until_double_blank(read_stdin_line, _stdin_has_pending_input)
 
     if not description.strip():
         console.print("[red]No challenge provided.[/red]")
@@ -451,7 +484,7 @@ async def cmd_solve(args: str):
     max_retries = 3
     if flag_format == "" or flag_format.strip().lower() == "none":
         flag_format = input("Error: Flag format not provided. Enter the flag format:")
-        set_key(".env", "FLAG_FORMAT", flag_format)
+        set_default_flag_format(flag_format)
 
     for attempt in range(1, max_retries + 1):
         if attempt > 1:
@@ -465,6 +498,7 @@ async def cmd_solve(args: str):
             description=description,
             upload_dir=settings.upload_dir,
             files=files,
+            flag_format=flag_format,
         )
 
         initial_state = {
@@ -1112,7 +1146,7 @@ def read_input_line() -> str | None:
 async def cmd_flagformat():
     flag_format = input("Enter the new flag format. Enter to skip.")
     if flag_format != "":
-        set_key(".env","FLAG_FORMAT",flag_format)
+        set_default_flag_format(flag_format)
 
 
 async def run_interactive():
