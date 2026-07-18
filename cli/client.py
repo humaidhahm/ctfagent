@@ -1174,7 +1174,7 @@ async def run_interactive():
         cmd = parts[0].lower()
         args = parts[1] if len(parts) > 1 else ""
 
-        if cmd in ("/exit", "/quit"):
+        if cmd in ("exit", "quit", "/exit", "/quit"):
             console.print("[dim]Shutting down CTFAgent...[/dim]")
             break
 
@@ -1223,12 +1223,15 @@ async def run_interactive():
             content = configure_llm_keys(content,config=True)
 
         else:
-            from rich.text import Text
-            llm = get_llm("default")
-            response = await llm.ainvoke([
-                HumanMessage(content=cmd)
-            ])
-            print(response.content)
+            try:
+                llm = get_llm("default")
+                response = await llm.ainvoke([
+                    HumanMessage(content=cmd)
+                ])
+                print(response.content)
+            except Exception as e:
+                console.print(f"[red]LLM error: {e}[/red]")
+                console.print("[yellow]Check your API keys with [bold]/llm[/bold] or run [bold]python3 run.py[/bold] to reconfigure.[/yellow]")
 
 
 def main():
