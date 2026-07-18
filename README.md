@@ -29,16 +29,16 @@ Then run CTFAgent:
 git clone https://github.com/yourusername/ctfagent.git
 cd ctfagent
 mkdir -p data uploads
-docker build -t ctfagent .
-docker run --rm -it ctfagent
+DOCKER_BUILDKIT=1 docker build -t ctfagent .
+docker compose run --rm ctfagent
 ```
 
-The first interactive Docker run prompts for your API keys/provider and writes configuration to `data/.env`. That file is mounted into the container, so your setup persists across container rebuilds and restarts.
+The Dockerfile uses BuildKit cache mounts for pip, so unchanged Python packages are reused across rebuilds when BuildKit is enabled. The first interactive Docker run prompts for your API keys/provider and writes configuration to `data/.env`. Compose mounts that file into the container, so your setup persists across container rebuilds and restarts.
 
 To run the CLI again later:
 
 ```bash
-docker run --rm -it ctfagent
+docker compose run --rm ctfagent
 ```
 
 To start the API after completing the interactive CLI setup:
@@ -144,7 +144,7 @@ Native setup writes `.env` in the project root. Docker setup writes `data/.env` 
 For the Docker interactive CLI, attach stdin and a TTY:
 
 ```bash
-docker run --rm -it ctfagent
+docker compose run --rm ctfagent
 ```
 
 You can also copy `.env.example` to the relevant env file and configure it manually:
