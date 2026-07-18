@@ -51,9 +51,9 @@ class ModelRegistry:
 
     def _init_models(self):
         # Fast/small models - good for simple tasks (classifier, flag_detector)
-        self.register("meta/llama-3.2-3b-instruct", "Llama 3.2 3B", "fast", weight=2.0)
-        self.register("meta/llama-4-maverick-17b-128e-instruct", "Llama 4 Maverick 17B", "fast", weight=1.0)
-        self.register("meta/llama-3.1-8b-instruct", "Llama 3.1 8B", "fast", weight=1.5)
+        self.register("meta/llama-3.2-3b-instruct", "Llama 3.2 3B", "fast", weight=1.0)
+        self.register("meta/llama-3.1-8b-instruct", "Llama 3.1 8B", "fast", weight=2.0)
+        self.register("meta/llama-4-maverick-17b-128e-instruct", "Llama 4 Maverick 17B", "fast", weight=5.0)
 
         # Capable models - for complex reasoning
         self.register("meta/llama-3.1-70b-instruct", "Llama 3.1 70B", "capable", weight=1.0)

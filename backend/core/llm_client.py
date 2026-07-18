@@ -135,8 +135,7 @@ def _build_client(
             api_key=api_key,
             base_url=settings.nvidia_nim_base_url,
             temperature=temperature,
-            max_tokens=4096,
-            max_retries=0,  # Rotation handles retries
+            max_retries=0,
             timeout=120,
         )
 
