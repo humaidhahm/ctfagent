@@ -83,6 +83,8 @@ async def ingest_challenge(
         target_url = extracted_urls[0]
 
     for url in extracted_urls:
+        if url == target_url:
+            continue
         try:
             async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
                 resp = await client.get(url)
