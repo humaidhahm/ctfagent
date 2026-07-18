@@ -47,6 +47,19 @@ DOMAIN_COLORS = {
 }
 
 BASE_DIR = Path(__file__).parent.resolve()
+
+def get_version() -> str:
+    try:
+        r = subprocess.run(
+            ['git', 'describe', '--tags', '--always', '--dirty'],
+            capture_output=True, text=True, timeout=5,
+            cwd=BASE_DIR,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip().lstrip('v')
+    except Exception:
+        pass
+    return "1.0.0"
 VENV_DIR = BASE_DIR / '.venv'
 REQUIREMENTS = BASE_DIR / 'requirements.txt'
 ENV_FILE = Path(os.environ.get('CTFAGENT_ENV_FILE', BASE_DIR / '.env')).expanduser()
@@ -102,7 +115,7 @@ TOOLS = [
     ('Forensics', 'pdftotext', 'poppler-utils', None, None),
     ('Forensics', 'stegoveritas', None, 'stegoveritas', None),
     ('Forensics', 'oletools', 'oletools', 'oletools', 'oletools'),
-    ('Forensics', 'pdf-parser', None, 'pdf-parser', None),
+    ('Forensics', 'pdf-parser', None, None, None),
 
     # Pwn
     ('Pwn', 'gdb', 'gdb', None, None),
@@ -111,8 +124,8 @@ TOOLS = [
     ('Pwn', 'strace', 'strace', None, None),
     ('Pwn', 'ltrace', 'ltrace', None, None),
     ('Pwn', 'patchelf', 'patchelf', None, None),
-    ('Pwn', 'ROPgadget', None, 'ROPgadget', None),
-    ('Pwn', 'checksec', None, 'checksec.py', None),
+    ('Pwn', 'ROPgadget', None, 'ROPgadget', 'ROPgadget'),
+    ('Pwn', 'checksec', None, 'checksec.py', 'checksec'),
     ('Pwn', 'pwntools', None, 'pwntools', 'pwn'),
     ('Pwn', 'angr', None, 'angr', 'angr'),
     ('Pwn', 'z3', None, 'z3-solver', 'z3'),
@@ -149,7 +162,7 @@ TOOLS = [
     ('OSINT', 'holehe', None, 'holehe', None),
     ('OSINT', 'theHarvester', None, 'theHarvester', None),
     ('OSINT', 'shodan', None, 'shodan', 'shodan'),
-    ('OSINT', 'recon-ng', None, 'recon-ng', None),
+    ('OSINT', 'recon-ng', None, None, None),
 
     # Misc
     ('Misc', 'screen', 'screen', None, None),
@@ -440,7 +453,7 @@ def install_python_deps(python_exe):
     # Install domain-specific pip packages
     pip_packages = set()
     for _, _, _, pip_pkg, _ in TOOLS:
-        if pip_pkg:
+        if pip_pkg and not pip_pkg.startswith("gem:"):
             pip_packages.add(pip_pkg)
 
     extra_pkgs = {
@@ -454,11 +467,18 @@ def install_python_deps(python_exe):
     }
     pip_packages.update(extra_pkgs)
 
+    # Remove packages already covered by requirements.txt
+    if REQUIREMENTS.exists():
+        with open(REQUIREMENTS) as f:
+            req_pkgs = set()
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    req_pkgs.add(line.split(">=")[0].split("==")[0].split("[")[0].strip())
+
+        pip_packages -= req_pkgs
+
     packages = sorted(pip_packages)
-    packages = [
-        p for p in packages
-        if not p.startswith("gem:")
-    ]
     installed = 0
     already_installed = 0
     failed = []
@@ -466,36 +486,23 @@ def install_python_deps(python_exe):
     p_info(f"Installing {len(packages)} CTF Python packages...")
 
     for i, pkg in enumerate(packages, 1):
-        p_info(f"[{i}/{len(packages)}] Installing {pkg}...")
-
         r = run_cmd(
-            [python_exe, "-m", "pip", "install", pkg],capture=True,
+            [python_exe, "-m", "pip", "install", pkg], capture=True,
             timeout=120,
         )
 
         output = (r.stdout or "") + (r.stderr or "")
 
         if r.returncode == 0:
-            if (
-                    "Requirement already satisfied" in output
-                    or "Already satisfied" in output
-            ):
-                p_info("  ✓ Already installed")
+            if "Requirement already satisfied" in output or "Already satisfied" in output:
+                p_ok("Already installed")
                 already_installed += 1
             else:
-                p_info("  ✓ Installed")
+                p_ok("Installed")
                 installed += 1
         else:
-            p_error("  ✗ Failed")
+            p_error("Failed")
             failed.append(pkg)
-
-            for line in reversed(output.splitlines()):
-                line = line.strip()
-                if line:
-                    p_error(f"    {line}")
-                    break
-
-            # Print the last meaningful error line
             for line in reversed(output.splitlines()):
                 line = line.strip()
                 if line:
@@ -512,7 +519,7 @@ def install_python_deps(python_exe):
         for pkg in failed:
             p_error(f"    • {pkg}")
     else:
-        p_info("  ✓ All packages installed successfully.")
+        p_ok("All packages installed successfully.")
 
 
 # ─── System Tools ──────────────────────────────────────────
@@ -560,16 +567,18 @@ def install_system_tools():
         run_cmd(_sudo(['apt-get', 'update', '-qq']), timeout=120)
         p_ok('Package list updated')
 
+    _installed_pip = set()
+
     # Install by domain
     domains = ['Web', 'Forensics', 'Pwn', 'RE', 'Crypto', 'OSINT', 'Misc']
     for domain in domains:
-        domain_tools = [(b, a, p) for d, b, a, p, _ in TOOLS if d == domain]
-        missing = [(b, a, p) for b, a, p in domain_tools if not check_tool(b, a)]
+        domain_tools = [(b, a, p, v) for d, b, a, p, v in TOOLS if d == domain]
+        missing = [(b, a, p, v) for b, a, p, v in domain_tools if not check_tool(b, a)]
 
         p_section(domain, f'{len(domain_tools)} tools, {len(missing)} to install')
 
         installed_count = 0
-        for binary, apt_pkg, pip_pkg in domain_tools:
+        for binary, apt_pkg, pip_pkg, verify_import in domain_tools:
             if check_tool(binary, apt_pkg):
                 ver = tool_version(binary)
                 p_tool(domain, binary, True, ver)
@@ -580,11 +589,13 @@ def install_system_tools():
                 p_tool(domain, binary, False, 'no root')
                 continue
 
-            # Install pip package if applicable (use venv pip, not system)
+            # Install pip package if applicable (skip if already installed via Python deps)
             pip_ok = False
-            if pip_pkg:
+            if pip_pkg and pip_pkg not in _installed_pip:
                 r = run_cmd(_pip_cmd(pip_pkg), timeout=120, capture=True)
                 pip_ok = r and r.returncode == 0
+                if pip_ok:
+                    _installed_pip.add(pip_pkg)
 
             # Install apt package (skip if no apt package name AND pip succeeded for a check-only binary)
             install_pkg = apt_pkg or (binary if not pip_pkg else None)
@@ -601,8 +612,11 @@ def install_system_tools():
             # Verify: check binary/apt first, then fall back to import check
             found = check_tool(binary, apt_pkg)
             if not found and pip_pkg:
-                # Try import-based verification
-                for import_name in [pip_pkg.replace('-', '_'), pip_pkg.replace('-', '')]:
+                import_names = []
+                if verify_import:
+                    import_names.append(verify_import)
+                import_names += [pip_pkg.replace('-', '_'), pip_pkg.replace('-', '')]
+                for import_name in import_names:
                     r = run_cmd(
                         [sys.executable, '-c', f'import {import_name}'],
                         capture=True, timeout=5,
@@ -909,8 +923,6 @@ def main():
     python_exe = ensure_venv()
 
     # ensure_venv re-execs into venv, so after this point we're inside venv
-    install_python_deps(python_exe)
-
     run_install_only()
 
     print(f'\n  {C.BOLD}{C.GREEN}╔══════════════════════════════════════════════════╗{C.NC}')

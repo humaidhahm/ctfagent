@@ -19,7 +19,7 @@ from typing import Optional
 from dotenv import set_key
 from langchain_core.messages import SystemMessage, HumanMessage
 from backend.core.llm_client import get_llm, RotatingLLM
-from run import configure_llm_keys, ENV_FILE
+from run import configure_llm_keys, ENV_FILE, get_version
 
 
 def _extract_json(text: str) -> tuple[dict | None, str]:
@@ -99,7 +99,7 @@ BANNER = r"""
                             __/ |               
                            |___/                 [/bold cyan]"""[1:]
 
-TAGLINE = "[bold cyan]Autonomous CTF Solver  ·  NVIDIA NIM x GEMMA 31B x GEMINI 3.1 Flash Lite  ·  v1.0.0[/bold cyan]"
+TAGLINE = f"[bold cyan]Autonomous CTF Solver  ·  NVIDIA NIM x GEMMA 31B x GEMINI 3.1 Flash Lite  ·  v{get_version()}[/bold cyan]"
 
 def print_help():
     """Print categorized help with Rich tables in a Panel."""
