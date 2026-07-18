@@ -29,11 +29,16 @@ class Settings(BaseSettings):
 
     @staticmethod
     def _split_keys(value: str) -> list[str]:
-        return [
-            key.strip()
-            for key in value.split(",")
-            if key.strip() and key.strip() != "your_key_here"
-        ]
+        result = []
+        for key in value.split(","):
+            k = key.strip()
+            if not k or k == "your_key_here":
+                continue
+            if "=" in k and not k.startswith(("nvapi-", "sk-", "AIza")):
+                k = k.split("=", 1)[1].strip()
+            if k:
+                result.append(k)
+        return result
 
     @property
     def nim_keys(self) -> list[str]:
