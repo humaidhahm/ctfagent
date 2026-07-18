@@ -22,9 +22,6 @@ import shutil
 import textwrap
 from pathlib import Path
 
-from backend.config.settings import settings
-
-
 # ─── ANSI Colors ───────────────────────────────────────────
 class C:
     BOLD = '\033[1m'
@@ -251,6 +248,7 @@ def read_key_pool(provider_name: str) -> list[str]:
 
 
 def configure_llm_keys(content: str,config=False) -> str:
+    from backend.config.settings import settings
     if (os.getenv("LLM_PROVIDER") != "" or os.getenv("LLM_PROVIDER") != "YOUR_KEY_HERE") and config == False:
         return content
     google_keys = get_env_value(content, "GOOGLE_API_KEYS")
