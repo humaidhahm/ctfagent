@@ -60,7 +60,7 @@ The API service uses a Compose profile, so `docker compose up` by itself will no
 Use the native installer if you are on Linux or WSL2 and want CTFAgent installed directly on that environment.
 
 ```bash
-git clone https://github.com/yourusername/ctfagent.git
+git clone https://github.com/humaidhahm/ctfagent
 cd ctfagent
 python3 run.py
 ```
