@@ -262,7 +262,8 @@ def read_key_pool(provider_name: str) -> list[str]:
 
 def configure_llm_keys(content: str,config=False) -> str:
     from backend.config.settings import settings
-    if (os.getenv("LLM_PROVIDER") != "" or os.getenv("LLM_PROVIDER") != "YOUR_KEY_HERE") and config == False:
+    provider = os.getenv("LLM_PROVIDER")
+    if provider and provider != "YOUR_KEY_HERE" and not config:
         return content
     google_keys = get_env_value(content, "GOOGLE_API_KEYS")
     if not google_keys:
