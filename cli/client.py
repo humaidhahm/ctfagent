@@ -356,12 +356,22 @@ def print_summary(summary: dict):
         if attachments else "None"
     )
 
+    cat = summary.get("category", "Unknown")
+    if hasattr(cat, "value"):
+        cat = cat.value
+
+    target = summary.get("target_url") or ""
+    target_host = summary.get("target_host")
+    target_port = summary.get("target_port")
+    if not target and target_host and target_port:
+        target = f"{target_host}:{target_port}"
+
     body = (
         f"[bold white]{summary.get('title') or summary.get('name') or 'Untitled'}[/bold white]\n\n"
-        f"[dim]Category:[/dim]      {summary.get('category', 'Unknown')}\n"
+        f"[dim]Category:[/dim]      {cat}\n"
         f"[dim]Difficulty:[/dim]    {summary.get('difficulty', 'Unknown')}\n"
         f"[dim]Points:[/dim]        {summary.get('points', '-')}\n"
-        f"[dim]Target:[/dim]        {summary.get('target_url', '-')}\n"
+        f"[dim]Target:[/dim]        {target or '-'}\n"
         f"[dim]Flag Format:[/dim]   [green]{summary.get('flag_format', '-')}[/green]\n"
         f"[dim]Attachments:[/dim]   {attachment_text}\n\n"
         f"[bold]Description[/bold]\n"
@@ -1134,9 +1144,8 @@ def read_input_line() -> str | None:
                 pasted = True
                 for raw_line in raw.split(b"\n"):
                     stripped = raw_line.decode("utf-8", errors="replace").strip()
-                    if not stripped:
-                        break
-                    lines.append(stripped)
+                    if stripped:
+                        lines.append(stripped)
         finally:
             os.close(fd)
     except (OSError, IOError):
