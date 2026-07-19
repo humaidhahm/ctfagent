@@ -261,7 +261,6 @@ def read_key_pool(provider_name: str) -> list[str]:
 
 
 def configure_llm_keys(content: str,config=False) -> str:
-    from backend.config.settings import settings
     provider = os.getenv("LLM_PROVIDER")
     if provider and provider != "YOUR_KEY_HERE" and not config:
         return content
@@ -306,19 +305,18 @@ def configure_llm_keys(content: str,config=False) -> str:
         try:
             provider = available[int(selection) - 1]
             os.environ["LLM_PROVIDER"] = provider
-            settings.llm_provider = provider
             break
         except (ValueError, IndexError):
             p_warn("Choose one of the displayed numbers")
 
-    if not get_env_value(content, "GOOGLE_API_KEYS") and (provider == "gemma" or provider == "gemini"):
+    if (config or not get_env_value(content, "GOOGLE_API_KEYS")) and (provider == "gemma" or provider == "gemini"):
         google_keys = read_key_pool("Google AI (Gemma and Gemini)")
         content = set_env_value(
             content,
             "GOOGLE_API_KEYS",
             ",".join(google_keys),
         )
-    elif not get_env_value(content, "NVIDIA_NIM_API_KEYS") and provider == "nim":
+    elif (config or not get_env_value(content, "NVIDIA_NIM_API_KEYS")) and provider == "nim":
         nim_keys = read_key_pool("NVIDIA NIM")
         content = set_env_value(
             content,
@@ -328,6 +326,47 @@ def configure_llm_keys(content: str,config=False) -> str:
 
     content = set_env_value(content, "LLM_PROVIDER", provider)
     return content
+
+
+def export_runtime_env(content: str) -> None:
+    """Make freshly written config visible to this process immediately."""
+    for key in (
+        "LLM_PROVIDER",
+        "GOOGLE_API_KEYS",
+        "GEMMA_API_KEYS",
+        "GEMINI_API_KEYS",
+        "NVIDIA_NIM_API_KEYS",
+        "NVIDIA_NIM_API_KEY",
+        "NVIDIA_NIM_BASE_URL",
+        "GEMMA_MODEL",
+        "GEMINI_MODEL",
+        "FLAG_FORMAT",
+    ):
+        value = get_env_value(content, key)
+        if value:
+            os.environ[key] = value
+
+
+def configured_key_counts(content: str) -> dict[str, int]:
+    google_keys = get_env_value(content, "GOOGLE_API_KEYS")
+    if not google_keys:
+        google_keys = ",".join(
+            key for key in (
+                get_env_value(content, "GEMMA_API_KEYS"),
+                get_env_value(content, "GEMINI_API_KEYS"),
+            )
+            if key
+        )
+
+    nim_keys = get_env_value(content, "NVIDIA_NIM_API_KEYS")
+    if not nim_keys:
+        nim_keys = get_env_value(content, "NVIDIA_NIM_API_KEY")
+
+    return {
+        "google": len({key.strip() for key in google_keys.split(",") if key.strip()}),
+        "nim": len({key.strip() for key in nim_keys.split(",") if key.strip()}),
+    }
+
 
 def run_cmd(cmd, capture=False, check=False, timeout=120):
     try:
@@ -671,9 +710,15 @@ def setup_environment():
         "gemini-3.1-flash-lite",
     )
     ENV_FILE.write_text(content)
+    export_runtime_env(content)
     p_ok(
         f"LLM provider set to "
         f"{get_env_value(content, 'LLM_PROVIDER').upper()}"
+    )
+    counts = configured_key_counts(content)
+    p_info(
+        f"Configured API keys: Google={counts['google']}, "
+        f"NIM={counts['nim']}"
     )
 
     flag_fmt = None
@@ -805,7 +850,7 @@ def check_uptodate():
     # Check core deps
     try:
         import rich
-        import langgraph
+        import deepagents
         import httpx
     except ImportError:
         return False
@@ -858,8 +903,7 @@ def run_docker_cli():
     """Docker images already include dependencies; run only first-use config."""
     if not sys.stdin.isatty():
         p_error('Docker CLI needs an interactive terminal.')
-        p_info('Use: docker run --rm -it ctfagent')
-        p_info('Or:  docker compose run --rm ctfagent')
+        p_info('Use: docker compose run --rm ctfagent')
         sys.exit(2)
 
     p_header('DOCKER STARTUP')

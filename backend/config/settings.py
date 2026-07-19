@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     max_agent_iterations: int = 20
     max_tool_timeout_seconds: int = 300
     agent_temperature: float = 0.1
+    google_min_request_interval_seconds: float = 1.0
 
     docker_sandbox_image: str = "ctfagent-sandbox:latest"
     docker_sandbox_memory_limit: str = "512m"

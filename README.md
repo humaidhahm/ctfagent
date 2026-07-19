@@ -151,10 +151,19 @@ You can also copy `.env.example` to the relevant env file and configure it manua
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `NVIDIA_NIM_API_KEY` | Yes | NVIDIA NIM API key |
+| `LLM_PROVIDER` | Yes | `nim`, `gemma`, or `gemini` |
+| `NVIDIA_NIM_API_KEYS` | For NIM | Comma-separated NVIDIA NIM API keys |
 | `NVIDIA_NIM_BASE_URL` | No | Base URL for NIM API |
+| `GOOGLE_API_KEYS` | For Gemma/Gemini | Comma-separated Google AI API keys |
+| `GOOGLE_MIN_REQUEST_INTERVAL_SECONDS` | No | Delay between Google LLM requests (default: 1.0) |
 | `MAX_AGENT_ITERATIONS` | No | Max solve attempts (default: 20) |
 | `FLAG_FORMAT` | No | Flag prefix (e.g. picoCTF, CTF) |
+
+Gemini/Gemma rate limits are quota-based at the Google project level. Multiple
+keys from the same project share that quota; use `/llm` to reconfigure keys and
+check the configured key count shown at startup. If your keys are from the same
+project, increase `GOOGLE_MIN_REQUEST_INTERVAL_SECONDS` to avoid shared quota
+bursts.
 
 ## License
 

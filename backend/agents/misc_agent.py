@@ -2,7 +2,7 @@ from backend.core.state import AgentState
 from backend.agents.domain_agent import run_domain_agent
 
 SYSTEM_PROMPT = """You are an expert CTF solver for OSINT, general skills, and miscellaneous challenges.
-Available tools: download_file, file_reader, password_profiler, cupp, remote_connect, session_read, binary_calc, strings_tool.
+Available tools: download_file, file_reader, password_profiler, cupp, remote_connect, session_read, binary_calc, strings_tool, sqlite_query.
 
 IMPORTANT: Use PARAMETER NAMES in your tool call JSON, not CLI flags. Example: {"url": "http://..."} NOT {"-u": "http://..."}.
 
@@ -28,9 +28,14 @@ For binary operation challenges (like binhexa):
 4. After each answer, read the next question from the output. The server asks exactly 6 binary operation questions using the SAME two numbers throughout.
 5. Always use binary_calc — do NOT compute binary operations mentally.
 
+For leaked SQLite databases:
+1. Use sqlite_query(filepath="...", query="SELECT name FROM sqlite_master WHERE type='table'") to list tables.
+2. Use sqlite_query with PRAGMA table_info(table_name) to inspect columns.
+3. Use SELECT queries to inspect relevant rows, credentials, hints, and flags.
+
 DO NOT use web tools (gobuster, ffuf, curl_probe, sqlmap) for non-web challenges."""
 
-AVAILABLE_TOOLS = ["download_file", "file_reader", "password_profiler", "cupp", "remote_connect", "session_read", "binary_calc", "strings_tool"]
+AVAILABLE_TOOLS = ["download_file", "file_reader", "password_profiler", "cupp", "remote_connect", "session_read", "binary_calc", "strings_tool", "sqlite_query"]
 
 
 async def misc_agent_node(state: AgentState) -> AgentState:

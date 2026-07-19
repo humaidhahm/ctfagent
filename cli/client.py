@@ -18,8 +18,14 @@ from typing import Optional
 
 from dotenv import set_key
 from langchain_core.messages import SystemMessage, HumanMessage
-from backend.core.llm_client import get_llm, RotatingLLM
-from run import configure_llm_keys, ENV_FILE, get_version
+from backend.core.llm_client import get_llm, refresh_llm_runtime, RotatingLLM
+from run import (
+    configure_llm_keys,
+    configured_key_counts,
+    ENV_FILE,
+    export_runtime_env,
+    get_version,
+)
 
 
 def _extract_json(text: str) -> tuple[dict | None, str]:
@@ -571,6 +577,7 @@ async def cmd_solve(args: str):
                 edit_summary(summary)
 
         manifest = manifest.model_validate(summary)
+        initial_state["manifest"] = manifest.model_dump()
 
         console.print(f"[cyan]Session ID:[/cyan] {session_id}")
         console.print(f"[dim]Launching agent... streaming live trace below[/dim]\n")
@@ -643,6 +650,8 @@ async def cmd_solve(args: str):
                 ))
                 if attempt < max_retries:
                     console.print("[yellow]Retrying with a fresh attempt...[/yellow]")
+                    description += f"\n\n[Previous attempt failed: {reason}. Try a different approach.]"
+                    continue
                 break
 
         except Exception as e:
@@ -1164,7 +1173,7 @@ async def run_interactive():
 
         if inp is None:
             console.print("\n[dim]Input closed. Shutting down CTFAgent...[/dim]")
-            console.print("[dim]For Docker CLI usage, run: docker run --rm -it ctfagent[/dim]")
+            console.print("[dim]For Docker CLI usage, run: docker compose run --rm ctfagent[/dim]")
             break
 
         if not inp:
@@ -1221,6 +1230,14 @@ async def run_interactive():
         elif cmd == "/llm":
             content = ENV_FILE.read_text()
             content = configure_llm_keys(content,config=True)
+            ENV_FILE.write_text(content)
+            export_runtime_env(content)
+            refresh_llm_runtime()
+            counts = configured_key_counts(content)
+            console.print(
+                "[green]LLM configuration updated.[/green] "
+                f"[dim]Google keys: {counts['google']}, NIM keys: {counts['nim']}[/dim]"
+            )
 
         else:
             try:
