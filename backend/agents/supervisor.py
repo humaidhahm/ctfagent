@@ -24,6 +24,7 @@ CATEGORY_ROUTE = {
     "pwn": "pwn_agent",
     "re": "re_agent",
     "osint": "misc_agent",
+    "ai": "misc_agent",
     "misc": "misc_agent",
 }
 
