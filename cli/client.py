@@ -9,6 +9,7 @@ import json
 import os
 import select
 import shutil
+import signal
 import sys
 import time
 import uuid
@@ -27,6 +28,16 @@ from run import (
     get_version,
 )
 
+
+_exiting = False
+
+def _signal_handler(signum, frame):
+    global _exiting
+    if _exiting:
+        os._exit(128 + signum)
+    _exiting = True
+    sys.stderr.write("\033[?25h\033[0m\n\033[1;33mquitting CtfAgent\033[0m\n")
+    sys.exit(0)
 
 def _extract_json(text: str) -> tuple[dict | None, str]:
     """Extract the first JSON object from text that may contain natural language prefix."""
@@ -1253,6 +1264,8 @@ async def run_interactive():
 
 def main():
     import asyncio
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
     asyncio.run(run_interactive())
 
 
