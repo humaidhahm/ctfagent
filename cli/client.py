@@ -36,7 +36,7 @@ def _signal_handler(signum, frame):
     if _exiting:
         os._exit(128 + signum)
     _exiting = True
-    sys.stderr.write("\033[?25h\033[0m\n\033[1;33mquitting CtfAgent\033[0m\n")
+    sys.stderr.write("\033[?25h\033[0m\n\033[1;33mShutting down CTFAgent...\033[0m\n")
     sys.exit(0)
 
 def _extract_json(text: str) -> tuple[dict | None, str]:
@@ -1251,15 +1251,8 @@ async def run_interactive():
             )
 
         else:
-            try:
-                llm = get_llm("default")
-                response = await llm.ainvoke([
-                    HumanMessage(content=cmd)
-                ])
-                print(response.content)
-            except Exception as e:
-                console.print(f"[red]LLM error: {e}[/red]")
-                console.print("[yellow]Check your API keys with [bold]/llm[/bold] or run [bold]python3 run.py[/bold] to reconfigure.[/yellow]")
+            console.print(f"[yellow]Command not found: {cmd}[/yellow]")
+            console.print("[dim]Type [bold cyan]/help[/bold cyan] for available commands.[/dim]")
 
 
 def main():

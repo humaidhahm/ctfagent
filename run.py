@@ -316,7 +316,7 @@ def configure_llm_keys(content: str,config=False) -> str:
             "GOOGLE_API_KEYS",
             ",".join(google_keys),
         )
-    elif (config or not get_env_value(content, "NVIDIA_NIM_API_KEYS")) and provider == "nim":
+    elif (config or get_env_value(content, "NVIDIA_NIM_API_KEYS") in ("", "your_key_here")) and provider == "nim":
         nim_keys = read_key_pool("NVIDIA NIM")
         content = set_env_value(
             content,
