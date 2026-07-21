@@ -44,6 +44,7 @@ async def classify_node(state: AgentState) -> dict:
         "- pwn: binary files, buffer overflows, format strings, shellcode, ROP, local binary exploitation\n"
         "- re: binaries to reverse-engineer, obfuscated code, keygen challenges\n"
         "- osint: password profiling from personal details, social media investigation, real-world lookups, hash cracking with personal info\n"
+        "- ai: artificial intelligence, machine learning, neural networks, LLM/chatbot challenges, AI model interactions\n"
         "- misc: anything else, general skills challenges, interactive terminal games, educational simulations\n\n"
         f"{experience_hints}"
         f"Description:\n{description}\n\n"
@@ -94,7 +95,7 @@ async def classify_node(state: AgentState) -> dict:
         }
 
     category = parsed.get("category", "misc").lower()
-    if category not in ("web", "crypto", "forensics", "pwn", "re", "osint", "misc"):
+    if category not in ("web", "crypto", "forensics", "pwn", "re", "osint", "ai", "misc"):
         category = "misc"
     # OSINT and misc both route to misc handler
 

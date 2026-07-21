@@ -9,6 +9,7 @@ import json
 import os
 import select
 import shutil
+import signal
 import sys
 import time
 import uuid
@@ -18,9 +19,25 @@ from typing import Optional
 
 from dotenv import set_key
 from langchain_core.messages import SystemMessage, HumanMessage
-from backend.core.llm_client import get_llm, RotatingLLM
-from run import configure_llm_keys, ENV_FILE, get_version
+from backend.core.llm_client import get_llm, refresh_llm_runtime, RotatingLLM
+from run import (
+    configure_llm_keys,
+    configured_key_counts,
+    ENV_FILE,
+    export_runtime_env,
+    get_version,
+)
 
+
+_exiting = False
+
+def _signal_handler(signum, frame):
+    global _exiting
+    if _exiting:
+        os._exit(128 + signum)
+    _exiting = True
+    sys.stderr.write("\033[?25h\033[0m\n\033[1;33mShutting down CTFAgent...\033[0m\n")
+    sys.exit(0)
 
 def _extract_json(text: str) -> tuple[dict | None, str]:
     """Extract the first JSON object from text that may contain natural language prefix."""
@@ -339,12 +356,22 @@ def print_summary(summary: dict):
         if attachments else "None"
     )
 
+    cat = summary.get("category", "Unknown")
+    if hasattr(cat, "value"):
+        cat = cat.value
+
+    target = summary.get("target_url") or ""
+    target_host = summary.get("target_host")
+    target_port = summary.get("target_port")
+    if not target and target_host and target_port:
+        target = f"{target_host}:{target_port}"
+
     body = (
         f"[bold white]{summary.get('title') or summary.get('name') or 'Untitled'}[/bold white]\n\n"
-        f"[dim]Category:[/dim]      {summary.get('category', 'Unknown')}\n"
+        f"[dim]Category:[/dim]      {cat}\n"
         f"[dim]Difficulty:[/dim]    {summary.get('difficulty', 'Unknown')}\n"
         f"[dim]Points:[/dim]        {summary.get('points', '-')}\n"
-        f"[dim]Target:[/dim]        {summary.get('target_url', '-')}\n"
+        f"[dim]Target:[/dim]        {target or '-'}\n"
         f"[dim]Flag Format:[/dim]   [green]{summary.get('flag_format', '-')}[/green]\n"
         f"[dim]Attachments:[/dim]   {attachment_text}\n\n"
         f"[bold]Description[/bold]\n"
@@ -571,6 +598,7 @@ async def cmd_solve(args: str):
                 edit_summary(summary)
 
         manifest = manifest.model_validate(summary)
+        initial_state["manifest"] = manifest.model_dump()
 
         console.print(f"[cyan]Session ID:[/cyan] {session_id}")
         console.print(f"[dim]Launching agent... streaming live trace below[/dim]\n")
@@ -643,6 +671,8 @@ async def cmd_solve(args: str):
                 ))
                 if attempt < max_retries:
                     console.print("[yellow]Retrying with a fresh attempt...[/yellow]")
+                    description += f"\n\n[Previous attempt failed: {reason}. Try a different approach.]"
+                    continue
                 break
 
         except Exception as e:
@@ -1114,9 +1144,8 @@ def read_input_line() -> str | None:
                 pasted = True
                 for raw_line in raw.split(b"\n"):
                     stripped = raw_line.decode("utf-8", errors="replace").strip()
-                    if not stripped:
-                        break
-                    lines.append(stripped)
+                    if stripped:
+                        lines.append(stripped)
         finally:
             os.close(fd)
     except (OSError, IOError):
@@ -1164,7 +1193,7 @@ async def run_interactive():
 
         if inp is None:
             console.print("\n[dim]Input closed. Shutting down CTFAgent...[/dim]")
-            console.print("[dim]For Docker CLI usage, run: docker run --rm -it ctfagent[/dim]")
+            console.print("[dim]For Docker CLI usage, run: docker compose run --rm ctfagent[/dim]")
             break
 
         if not inp:
@@ -1221,21 +1250,24 @@ async def run_interactive():
         elif cmd == "/llm":
             content = ENV_FILE.read_text()
             content = configure_llm_keys(content,config=True)
+            ENV_FILE.write_text(content)
+            export_runtime_env(content)
+            refresh_llm_runtime()
+            counts = configured_key_counts(content)
+            console.print(
+                "[green]LLM configuration updated.[/green] "
+                f"[dim]Google keys: {counts['google']}, NIM keys: {counts['nim']}[/dim]"
+            )
 
         else:
-            try:
-                llm = get_llm("default")
-                response = await llm.ainvoke([
-                    HumanMessage(content=cmd)
-                ])
-                print(response.content)
-            except Exception as e:
-                console.print(f"[red]LLM error: {e}[/red]")
-                console.print("[yellow]Check your API keys with [bold]/llm[/bold] or run [bold]python3 run.py[/bold] to reconfigure.[/yellow]")
+            console.print(f"[yellow]Command not found: {cmd}[/yellow]")
+            console.print("[dim]Type [bold cyan]/help[/bold cyan] for available commands.[/dim]")
 
 
 def main():
     import asyncio
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
     asyncio.run(run_interactive())
 
 

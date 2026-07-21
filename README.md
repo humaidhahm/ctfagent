@@ -29,16 +29,16 @@ Then run CTFAgent:
 git clone https://github.com/yourusername/ctfagent.git
 cd ctfagent
 mkdir -p data uploads
-docker build -t ctfagent .
-docker run --rm -it ctfagent
+DOCKER_BUILDKIT=1 docker build -t ctfagent .
+docker compose run --rm ctfagent
 ```
 
-The first interactive Docker run prompts for your API keys/provider and writes configuration to `data/.env`. That file is mounted into the container, so your setup persists across container rebuilds and restarts.
+The Dockerfile uses BuildKit cache mounts for pip, so unchanged Python packages are reused across rebuilds when BuildKit is enabled. The first interactive Docker run prompts for your API keys/provider and writes configuration to `data/.env`. Compose mounts that file into the container, so your setup persists across container rebuilds and restarts.
 
 To run the CLI again later:
 
 ```bash
-docker run --rm -it ctfagent
+docker compose run --rm ctfagent
 ```
 
 To start the API after completing the interactive CLI setup:
@@ -144,17 +144,26 @@ Native setup writes `.env` in the project root. Docker setup writes `data/.env` 
 For the Docker interactive CLI, attach stdin and a TTY:
 
 ```bash
-docker run --rm -it ctfagent
+docker compose run --rm ctfagent
 ```
 
 You can also copy `.env.example` to the relevant env file and configure it manually:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `NVIDIA_NIM_API_KEY` | Yes | NVIDIA NIM API key |
+| `LLM_PROVIDER` | Yes | `nim`, `gemma`, or `gemini` |
+| `NVIDIA_NIM_API_KEYS` | For NIM | Comma-separated NVIDIA NIM API keys |
 | `NVIDIA_NIM_BASE_URL` | No | Base URL for NIM API |
+| `GOOGLE_API_KEYS` | For Gemma/Gemini | Comma-separated Google AI API keys |
+| `GOOGLE_MIN_REQUEST_INTERVAL_SECONDS` | No | Delay between Google LLM requests (default: 1.0) |
 | `MAX_AGENT_ITERATIONS` | No | Max solve attempts (default: 20) |
 | `FLAG_FORMAT` | No | Flag prefix (e.g. picoCTF, CTF) |
+
+Gemini/Gemma rate limits are quota-based at the Google project level. Multiple
+keys from the same project share that quota; use `/llm` to reconfigure keys and
+check the configured key count shown at startup. If your keys are from the same
+project, increase `GOOGLE_MIN_REQUEST_INTERVAL_SECONDS` to avoid shared quota
+bursts.
 
 ## License
 

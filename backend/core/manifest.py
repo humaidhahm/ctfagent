@@ -12,6 +12,7 @@ class ChallengeCategory(str, Enum):
     PWN = "pwn"
     RE = "re"
     OSINT = "osint"
+    AI = "ai"
     MISC = "misc"
     UNKNOWN = "unknown"
 

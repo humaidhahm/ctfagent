@@ -1,4 +1,5 @@
 import threading
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any, Optional
 
@@ -36,12 +37,37 @@ class KeyPool:
             self._current = (index + 1) % len(self.keys)
 
 
+class AsyncRequestPacer:
+    def __init__(self, min_interval_seconds: float):
+        self.min_interval_seconds = min_interval_seconds
+        self._next_allowed = 0.0
+        self._lock = asyncio.Lock()
+
+    async def wait(self) -> None:
+        if self.min_interval_seconds <= 0:
+            return
+
+        async with self._lock:
+            loop = asyncio.get_running_loop()
+            now = loop.time()
+            delay = self._next_allowed - now
+            if delay > 0:
+                await asyncio.sleep(delay)
+                now = loop.time()
+            self._next_allowed = now + self.min_interval_seconds
+
+
 _google_pool = KeyPool(settings.configured_google_keys)
 
 _pools = {
     "nim": KeyPool(settings.nim_keys),
     "gemma": _google_pool,
     "gemini": _google_pool,
+}
+
+_pacers = {
+    "gemma": AsyncRequestPacer(settings.google_min_request_interval_seconds),
+    "gemini": AsyncRequestPacer(settings.google_min_request_interval_seconds),
 }
 
 _session_models: dict[str, str] = {}
@@ -106,6 +132,18 @@ def _should_rotate_key(exc: Exception) -> bool:
 
     # Authentication, quota/rate limits and server errors.
     return status in {401, 403, 408, 409, 429} or status >= 500
+
+
+def _format_exception(exc: Exception) -> str:
+    status = _status_code(exc)
+    prefix = f"HTTP {status} " if status is not None else ""
+    return f"{prefix}{type(exc).__name__}: {exc}"
+
+
+async def _pace_provider(provider: str) -> None:
+    pacer = _pacers.get(provider)
+    if pacer is not None:
+        await pacer.wait()
 
 
 def _nim_model(model_key: str) -> str:
@@ -196,6 +234,7 @@ class RotatingLLM:
                     self.temperature,
                 )
 
+                await _pace_provider(self.provider)
                 result = await client.ainvoke(
                     input,
                     config=config,
@@ -214,12 +253,13 @@ class RotatingLLM:
                 logger.warning(
                     "{} API key failed; rotating to next key: {}",
                     self.provider,
-                    type(exc).__name__,
+                    _format_exception(exc),
                 )
                 self.pool.mark_failed(api_key)
 
         raise RuntimeError(
-            f"All {self.provider} API keys failed"
+            f"All {self.provider} API keys failed; last error: "
+            f"{_format_exception(last_error)}"
         ) from last_error
 
     async def astream(
@@ -241,6 +281,7 @@ class RotatingLLM:
                     self.temperature,
                 )
 
+                await _pace_provider(self.provider)
                 async for chunk in client.astream(
                     input,
                     config=config,
@@ -262,12 +303,13 @@ class RotatingLLM:
                 logger.warning(
                     "{} streaming key failed; rotating: {}",
                     self.provider,
-                    type(exc).__name__,
+                    _format_exception(exc),
                 )
                 self.pool.mark_failed(api_key)
 
         raise RuntimeError(
-            f"All {self.provider} API keys failed"
+            f"All {self.provider} API keys failed; last error: "
+            f"{_format_exception(last_error)}"
         ) from last_error
 
 
@@ -291,6 +333,58 @@ def get_llm(
             else settings.agent_temperature
         ),
     )
+
+
+def get_chat_model(
+    model_key: str,
+    temperature: Optional[float] = None,
+):
+    provider = settings.llm_provider.strip().lower()
+
+    if provider not in _pools:
+        raise ValueError(
+            "LLM_PROVIDER must be nim, gemma, or gemini"
+        )
+
+    pool = _pools[provider]
+    candidates = pool.candidates()
+    if not candidates:
+        raise RuntimeError(
+            f"No API keys configured for provider '{provider}'"
+        )
+
+    return _build_client(
+        provider=provider,
+        api_key=candidates[0],
+        model_key=model_key,
+        temperature=(
+            temperature
+            if temperature is not None
+            else settings.agent_temperature
+        ),
+    )
+
+
+def refresh_llm_runtime() -> None:
+    settings.__init__()
+
+    _google_pool.keys = list(dict.fromkeys(settings.configured_google_keys))
+    _google_pool._current = 0
+    _pools["nim"] = KeyPool(settings.nim_keys)
+    _pools["gemma"] = _google_pool
+    _pools["gemini"] = _google_pool
+
+    for provider in ("gemma", "gemini"):
+        pacer = _pacers.get(provider)
+        if pacer is None:
+            _pacers[provider] = AsyncRequestPacer(
+                settings.google_min_request_interval_seconds
+            )
+        else:
+            pacer.min_interval_seconds = settings.google_min_request_interval_seconds
+            pacer._next_allowed = 0.0
+
+    clear_session_models()
 
 
 def clear_session_models() -> None:

@@ -307,7 +307,7 @@ async def run_domain_agent(
         for i, tc in enumerate(recent):
             tool_history_str += (
                 f"\nTool Call {i+1}: {tc.get('tool_name')}({tc.get('tool_input', {})})\n"
-                f"Output: {tc.get('tool_output', '')[:500]}\n"
+                f"Output: {tc.get('tool_output', '')[:4000]}\n"
             )
         # Detect repeated same-tool calls with no progress
         last_tools = [t.get("tool_name") for t in tool_history[-6:]]
@@ -684,14 +684,14 @@ async def run_domain_agent(
     new_tool_calls.append({
         "tool_name": tool_name,
         "tool_input": tool_args,
-        "tool_output": tool_result.get("output", "")[:2000],
+        "tool_output": tool_result.get("output", "")[:5000],
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "success": tool_result.get("success", False),
     })
     # Keep tool_history bounded: only return the new record; reducer appends it
     # The state reducer uses operator.add, so each return adds one element.
     # Total history is bounded by max_iterations * 1 = 20 entries.
-    obs_output = tool_result.get('output', '')[:200]
+    obs_output = tool_result.get('output', '')[:1000]
     obs_error = tool_result.get('error', '')
     if obs_error:
         obs_output += f" [ERROR: {obs_error[:100]}]"

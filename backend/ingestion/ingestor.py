@@ -15,7 +15,7 @@ from backend.core.manifest import ChallengeManifest, FileAttachment, ChallengeCa
 URL_REGEX = re.compile(r'https?://[^\s\'\"<>]+')
 IP_PORT_REGEX = re.compile(r'(\d{1,3}(?:\.\d{1,3}){3}):(\d+)')
 HOST_PORT_REGEX = re.compile(r'(?:host|server|connect to)\s*[:\s]+([a-zA-Z0-9.-]+)\s*(?:port|:)\s*(\d+)', re.IGNORECASE)
-NC_REGEX = re.compile(r'(?:^|\s)nc\s+([a-zA-Z0-9.-]+)\s+(\d+)')
+NC_REGEX = re.compile(r'(?:^|\s)(?:nc|ncat)\s+(?:-[a-zA-Z0-9]+\s+)*([a-zA-Z0-9._-]+)\s+(\d+)')
 FLAG_FORMAT_REGEX = re.compile(r'((?:[A-Za-z0-9_]+)?(?:CTF|flag|FLAG)\{[^}]+\})')
 
 
