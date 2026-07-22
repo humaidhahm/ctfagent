@@ -318,16 +318,22 @@ def configure_llm_keys(content: str,config=False) -> str:
     return content
 
 def run_cmd(cmd, capture=False, check=False, timeout=120):
-    try:
-        result = subprocess.run(
-            cmd, capture_output=capture, text=True, timeout=timeout
-        )
-        if check and result.returncode != 0:
-            return None
-        return result
-    except Exception:
-        return None
+    result = subprocess.run(
+        cmd,
+        capture_output=capture,
+        text=True,
+        timeout=timeout,
+    )
 
+    if check and result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            cmd,
+            result.stdout,
+            result.stderr,
+        )
+
+    return result
 def check_tool(binary, apt_pkg=None):
     if shutil.which(binary):
         return True
