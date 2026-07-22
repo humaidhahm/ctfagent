@@ -150,6 +150,82 @@ def print_help():
     console.print(Panel(examples, border_style="dim", title="[bold]Examples[/bold]", title_align="left"))
 
 
+BANNER = r"""
+[bold cyan]   ______ _______ ______    _____  ____  _    __ ______ _____
+  / ____//_  __// ____/   / ___/ / __ \| |  / // ____// ___/
+ / /      / /  / /_       \__ \ / / / /| | / // __/   \__ \
+/ /___   / /  / __/      ___/ // /_/ / | |/ // /___  ___/ /
+\____/  /_/  /_/        /____/ \____/  |___//_____/ /____/ [/bold cyan]"""[1:]
+
+TAGLINE = "[bold bright_cyan]AI Ethical Hacking Terminal  //  CTF Solver  //  v1.0.0[/bold bright_cyan]"
+
+THEME = {
+    "cyan": "bright_cyan",
+    "muted": "grey62",
+    "green": "spring_green3",
+    "purple": "medium_purple1",
+    "red": "red1",
+}
+
+
+def terminal_panel(renderable, title: str, border_style: str = "cyan", **kwargs) -> Panel:
+    """Create a compact neon terminal panel."""
+    return Panel(
+        renderable,
+        title=f"[bold {THEME['cyan']}][ {title.upper()} ][/bold {THEME['cyan']}]",
+        title_align="left",
+        border_style=border_style,
+        box=box.ROUNDED,
+        padding=(1, 2),
+        **kwargs,
+    )
+
+
+def print_help():
+    """Print the neon terminal command menu."""
+    commands = Table(show_header=True, header_style="bold bright_cyan", box=None, padding=(0, 2, 0, 0))
+    commands.add_column("Command", style="bright_cyan", no_wrap=True)
+    commands.add_column("Args", style="medium_purple1", no_wrap=True)
+    commands.add_column("Description", style="grey78")
+
+    help_items = [
+        ("solve", "<desc|file>", "Submit a CTF challenge to solve"),
+        ("flag", "", "Set the default flag format"),
+        ("llm", "", "Configure LLM providers and keys"),
+        ("sessions", "", "List active and recent sessions"),
+        ("view", "<id>", "View a session summary and trace"),
+        ("watch", "<id>", "Live-stream agent reasoning"),
+        ("writeup", "<id>", "Generate a solved-challenge writeup"),
+        ("benchmark", "", "Run known challenge checks"),
+        ("experience", "", "View the experience database"),
+        ("experience find", "<query>", "Search similar solved challenges"),
+        ("tools", "[domain]", "Check installed security tools"),
+        ("install", "[domain]", "Install missing tools"),
+        ("banner", "", "Display the dashboard"),
+        ("clear", "", "Clear screen and redraw dashboard"),
+        ("help", "", "Show this menu"),
+        ("exit", "", "Exit CTF Solver"),
+    ]
+    for cmd, arg, desc in help_items:
+        commands.add_row(cmd, arg, desc)
+
+    examples = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
+    examples.add_column("Example", style="grey70")
+    examples.add_row("[bright_cyan]>[/bright_cyan] solve \"login form at http://target\"")
+    examples.add_row("[bright_cyan]>[/bright_cyan] solve ./challenge.elf")
+    examples.add_row("[bright_cyan]>[/bright_cyan] tools web")
+    examples.add_row("[bright_cyan]>[/bright_cyan] watch <session_id>")
+
+    grid = Table.grid(expand=True)
+    grid.add_column(ratio=2)
+    grid.add_column(ratio=1)
+    grid.add_row(
+        terminal_panel(commands, "Command Menu"),
+        terminal_panel(examples, "Quick Runs"),
+    )
+    console.print(grid)
+
+
 DOMAIN_COLORS = {
     "web": "cyan",
     "crypto": "yellow",
@@ -1085,8 +1161,51 @@ async def cmd_tools(args: str = ""):
 
 
 def cmd_banner():
-    """Display banner in a clean panel"""
-    console.print(Panel(BANNER, border_style="green", subtitle=TAGLINE, subtitle_align="center"))
+    """Display the CTF Solver terminal dashboard."""
+    intro = Table.grid(padding=(0, 1))
+    intro.add_column(justify="left")
+    intro.add_row(BANNER)
+    intro.add_row("[bold bright_cyan]CTF SOLVER[/bold bright_cyan]  [grey62]AI ETHICAL HACKING ASSISTANT[/grey62]")
+    intro.add_row("")
+    intro.add_row("[grey62]Version[/grey62]     : [white]1.0.0[/white]")
+    intro.add_row("[grey62]Workspace[/grey62]   : [medium_purple1]/home/ctf-solver[/medium_purple1]")
+    intro.add_row("[grey62]Mode[/grey62]        : [spring_green3]Interactive[/spring_green3]")
+    intro.add_row("[grey62]Hint[/grey62]        : type [bright_cyan]help[/bright_cyan] to view commands")
+
+    status = Table.grid(padding=(0, 1))
+    status.add_column()
+    status.add_row("[grey62]* AI Core[/grey62]        : [spring_green3]configured[/spring_green3]")
+    status.add_row("[grey62]* Knowledge Base[/grey62] : [spring_green3]loaded[/spring_green3]")
+    status.add_row(f"[grey62]* Flag Format[/grey62]    : [medium_purple1]{settings.flag_format or 'unset'}[/medium_purple1]")
+    status.add_row(f"[grey62]* Uploads[/grey62]        : [bright_cyan]{settings.upload_dir}[/bright_cyan]")
+    status.add_row("[grey62]* Commands[/grey62]       : [white]solve, tools, sessions, watch[/white]")
+
+    tips = Table.grid(padding=(0, 1))
+    tips.add_column()
+    tips.add_row("[bright_cyan]>[/bright_cyan] [white]solve <desc|file>[/white] [grey62]start a challenge[/grey62]")
+    tips.add_row("[bright_cyan]>[/bright_cyan] [white]tools [domain][/white]    [grey62]check tool availability[/grey62]")
+    tips.add_row("[bright_cyan]>[/bright_cyan] [white]sessions[/white]          [grey62]show active sessions[/grey62]")
+    tips.add_row("[bright_cyan]>[/bright_cyan] [white]watch <id>[/white]        [grey62]stream a trace[/grey62]")
+    tips.add_row("[bright_cyan]>[/bright_cyan] [white]clear[/white]             [grey62]redraw terminal[/grey62]")
+
+    grid = Table.grid(expand=True)
+    grid.add_column(ratio=1)
+    grid.add_column(ratio=1)
+    grid.add_column(ratio=1)
+    grid.add_row(
+        terminal_panel(intro, "CTF Solver"),
+        terminal_panel(status, "System Status"),
+        terminal_panel(tips, "Quick Commands"),
+    )
+
+    console.print(Panel(
+        grid,
+        title="[bold bright_cyan]CTF SOLVER // AI ETHICAL HACKING TERMINAL[/bold bright_cyan]",
+        title_align="center",
+        border_style="bright_black",
+        box=box.ROUNDED,
+        padding=(1, 1),
+    ))
 
 
 def read_input_line() -> str | None:
@@ -1143,17 +1262,96 @@ def read_input_line() -> str | None:
     return "\n".join(lines)
 
 
+def read_input_line() -> str | None:
+    """Read input with the CTF Solver neon prompt."""
+    try:
+        first = input("\033[36mctfsolver\033[0m \033[35m~\033[0m\033[1m >\033[0m ")
+    except (EOFError, KeyboardInterrupt):
+        return None
+
+    if not first:
+        return ""
+
+    lines = [first.strip()]
+    pasted = False
+
+    try:
+        fd = os.open("/dev/stdin", os.O_RDONLY | os.O_NONBLOCK)
+        try:
+            raw = os.read(fd, 65536)
+            if raw:
+                pasted = True
+                for raw_line in raw.split(b"\n"):
+                    stripped = raw_line.decode("utf-8", errors="replace").strip()
+                    if not stripped:
+                        break
+                    lines.append(stripped)
+        finally:
+            os.close(fd)
+    except (OSError, IOError):
+        pass
+
+    if pasted:
+        console.print(terminal_panel("\n".join(lines), "Pasted Content", border_style="bright_black"))
+        console.print("[grey62]Add more lines or press [bold]Enter[/bold] twice to execute.[/grey62]")
+        while True:
+            sys.stdout.write("\033[36mappend\033[0m \033[35m~\033[0m\033[1m >\033[0m ")
+            sys.stdout.flush()
+            try:
+                more = input()
+            except (EOFError, KeyboardInterrupt):
+                break
+            if not more:
+                break
+            lines.append(more.strip())
+
+    return "\n".join(lines)
+
+
 async def cmd_flagformat():
     flag_format = input("Enter the new flag format. Enter to skip.")
     if flag_format != "":
         set_default_flag_format(flag_format)
 
 
+def normalize_command(cmd: str, args: str) -> tuple[str, str]:
+    """Support both slash commands and plain terminal commands."""
+    cmd = cmd.lstrip("/").lower()
+
+    if cmd == "scan":
+        cmd = "solve"
+    elif cmd == "history":
+        cmd = "sessions"
+    elif cmd == "experience_find":
+        cmd = "experience"
+        args = f"find {args}".strip()
+    elif cmd == "experience_clear":
+        cmd = "experience"
+        args = "clear"
+    elif cmd == "install_":
+        cmd = "install"
+
+    return cmd, args
+
+
+async def cmd_chat(args: str):
+    """Ask the configured LLM a question without starting a solve session."""
+    question = args.strip()
+    if not question:
+        question = input("Ask CTF Solver: ").strip()
+    if not question:
+        return
+
+    llm = get_llm("default")
+    response = await llm.ainvoke([HumanMessage(content=question)])
+    console.print(terminal_panel(response.content, "AI Chat", border_style="bright_black"))
+
+
 async def run_interactive():
     """Main interactive CLI loop"""
     cmd_banner()
     await check_missing_tools()
-    console.print("[dim]Type [bold cyan]/help[/bold cyan] for available commands. [bold cyan]exit[/bold cyan] to quit.[/dim]\n")
+    console.print("[grey62]Type [bold bright_cyan]help[/bold bright_cyan] for commands. Slash commands still work.[/grey62]\n")
 
     while True:
         try:
@@ -1173,62 +1371,61 @@ async def run_interactive():
         parts = inp.split(maxsplit=1)
         cmd = parts[0].lower()
         args = parts[1] if len(parts) > 1 else ""
+        cmd, args = normalize_command(cmd, args)
 
-        if cmd in ("/exit", "/quit"):
-            console.print("[dim]Shutting down CTFAgent...[/dim]")
+        if cmd in ("exit", "quit"):
+            console.print("[grey62]Shutting down CTF Solver...[/grey62]")
             break
 
-        elif cmd == "/help":
+        elif cmd == "help":
             print_help()
 
-        elif cmd == "/banner":
+        elif cmd == "banner":
             cmd_banner()
 
-        elif cmd == "/clear":
+        elif cmd == "clear":
             os.system("clear" if os.name == "posix" else "cls")
             cmd_banner()
 
-        elif cmd == "/solve":
+        elif cmd == "solve":
             await cmd_solve(args)
 
-        elif cmd == "/sessions":
+        elif cmd == "sessions":
             await cmd_sessions()
 
-        elif cmd == "/view":
+        elif cmd == "view":
             await cmd_view(args)
 
-        elif cmd == "/watch":
+        elif cmd == "watch":
             await cmd_watch(args)
 
-        elif cmd == "/writeup":
+        elif cmd == "writeup":
             await cmd_writeup(args)
 
-        elif cmd == "/benchmark":
+        elif cmd == "benchmark":
             await cmd_benchmark()
 
-        elif cmd == "/tools":
+        elif cmd == "tools":
             await cmd_tools(args)
 
-        elif cmd == "/install":
+        elif cmd == "install":
             await cmd_install(args)
 
-        elif cmd == "/experience":
+        elif cmd == "experience":
             await cmd_experience(args)
             
-        elif cmd == "/flag":
+        elif cmd == "flag":
             await cmd_flagformat()
 
-        elif cmd == "/llm":
+        elif cmd == "llm":
             content = ENV_FILE.read_text()
             content = configure_llm_keys(content,config=True)
 
+        elif cmd == "chat":
+            await cmd_chat(args)
+
         else:
-            from rich.text import Text
-            llm = get_llm("default")
-            response = await llm.ainvoke([
-                HumanMessage(content=cmd)
-            ])
-            print(response.content)
+            await cmd_chat(inp)
 
 
 def main():
