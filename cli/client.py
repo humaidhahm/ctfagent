@@ -194,28 +194,28 @@ def print_help():
         return table
 
     solve_rows = [
-        ("solve", "<desc|file>", "submit a challenge"),
-        ("scan", "<desc|file>", "alias for solve"),
-        ("flag", "", "set flag format"),
-        ("writeup", "<id>", "generate writeup"),
+        ("/solve", "<desc|file>", "submit a challenge"),
+        ("/scan", "<desc|file>", "alias for solve"),
+        ("/flag", "", "set flag format"),
+        ("/writeup", "<id>", "generate writeup"),
     ]
     session_rows = [
-        ("sessions", "", "list sessions"),
-        ("history", "", "alias for sessions"),
-        ("view", "<id>", "show session trace"),
-        ("watch", "<id>", "stream live trace"),
+        ("/sessions", "", "list sessions"),
+        ("/history", "", "alias for sessions"),
+        ("/view", "<id>", "show session trace"),
+        ("/watch", "<id>", "stream live trace"),
     ]
     tool_rows = [
-        ("tools", "[domain]", "check installed tools"),
-        ("install", "[domain]", "install missing tools"),
-        ("experience", "", "show solved history"),
-        ("experience find", "<query>", "search similar solves"),
+        ("/tools", "[domain]", "check installed tools"),
+        ("/install", "[domain]", "install missing tools"),
+        ("/experience", "", "show solved history"),
+        ("/experience find", "<query>", "search similar solves"),
     ]
     system_rows = [
-        ("chat", "[question]", "ask the LLM"),
-        ("llm", "", "configure providers"),
-        ("clear", "", "redraw terminal"),
-        ("exit", "", "quit"),
+        ("/chat", "[question]", "ask the LLM"),
+        ("/llm", "", "configure providers"),
+        ("/clear", "", "redraw terminal"),
+        ("/exit", "", "quit"),
     ]
 
     grid = Table.grid(expand=True)
@@ -232,9 +232,9 @@ def print_help():
 
     examples = Table.grid(padding=(0, 1))
     examples.add_column(style="grey70")
-    examples.add_row("[bright_cyan]>[/bright_cyan] [white]solve[/white] [medium_purple1]\"login form at http://target\"[/medium_purple1]")
-    examples.add_row("[bright_cyan]>[/bright_cyan] [white]tools[/white] [medium_purple1]web[/medium_purple1]")
-    examples.add_row("[bright_cyan]>[/bright_cyan] [white]watch[/white] [medium_purple1]<session_id>[/medium_purple1]")
+    examples.add_row("[bright_cyan]>[/bright_cyan] [white]/solve[/white] [medium_purple1]\"login form at http://target\"[/medium_purple1]")
+    examples.add_row("[bright_cyan]>[/bright_cyan] [white]/tools[/white] [medium_purple1]web[/medium_purple1]")
+    examples.add_row("[bright_cyan]>[/bright_cyan] [white]/watch[/white] [medium_purple1]<session_id>[/medium_purple1]")
 
     console.print(Panel(
         grid,
@@ -884,7 +884,7 @@ async def cmd_watch(session_id: str):
     """Live-stream agent trace"""
     session_id = session_id.strip()
     if not session_id:
-        console.print("[red]Usage: watch <session_id>[/red]")
+        console.print("[red]Usage: /watch <session_id>[/red]")
         return
 
     seen = 0
@@ -924,7 +924,7 @@ async def cmd_writeup(session_id: str):
     """Generate a writeup for a solved challenge"""
     session_id = session_id.strip()
     if not session_id:
-        console.print("[red]Usage: writeup <session_id>[/red]")
+        console.print("[red]Usage: /writeup <session_id>[/red]")
         return
 
     session = await session_store.get(session_id)
@@ -933,7 +933,7 @@ async def cmd_writeup(session_id: str):
         return
 
     if not session.get("solved"):
-        console.print("[yellow]Challenge not solved yet. Run solve first.[/yellow]")
+        console.print("[yellow]Challenge not solved yet. Run /solve first.[/yellow]")
         return
 
     from backend.core.nim_client import get_nim_llm
@@ -1058,7 +1058,7 @@ async def cmd_experience(args: str):
     if subcmd == "find":
         query = parts[1] if len(parts) > 1 else ""
         if not query:
-            console.print("[red]Usage: experience find <query>[/red]")
+            console.print("[red]Usage: /experience find <query>[/red]")
             return
         results = experience_db.find_similar(query, top_k=10)
         if not results:
@@ -1154,6 +1154,56 @@ async def cmd_install(args: str = ""):
     print()  # Separate installer output from the final status.
 
 
+async def cmd_install(args: str = ""):
+    """Install missing system tools with themed terminal status panels."""
+    from backend.core.tool_checker import DOMAIN_TOOLS
+
+    parts = args.strip().split(maxsplit=1)
+    filter_domain = parts[0].capitalize() if parts and parts[0] else None
+
+    if filter_domain and filter_domain not in DOMAIN_TOOLS:
+        error_console.print(terminal_panel(
+            f"[red]Unknown domain:[/red] [white]{parts[0]}[/white]\n"
+            f"[grey70]Available:[/grey70] [bright_cyan]{', '.join(DOMAIN_TOOLS.keys())}[/bright_cyan]\n\n"
+            "[grey70]Usage:[/grey70] [white]/install[/white] [medium_purple1][domain][/medium_purple1]",
+            "Install Error",
+            border_style="red",
+        ))
+        return
+
+    target = filter_domain or "all domains"
+    console.print(terminal_panel(
+        f"[grey70]Target[/grey70]    : [white]{target}[/white]\n"
+        "[grey70]Installer[/grey70] : [bright_cyan]system tool bootstrap[/bright_cyan]\n"
+        "[grey70]Status[/grey70]    : [medium_purple1]running[/medium_purple1]\n\n"
+        "[grey62]Installer output may appear below while packages are checked or installed.[/grey62]",
+        "Install In Progress",
+        border_style="bright_black",
+    ))
+
+    from run import run_install_only
+
+    try:
+        run_install_only()
+        console.print(terminal_panel(
+            f"[grey70]Target[/grey70] : [white]{target}[/white]\n"
+            "[grey70]Status[/grey70] : [spring_green3]complete[/spring_green3]\n\n"
+            "[grey62]Run [white]/tools[/white] to refresh availability.[/grey62]",
+            "Install Complete",
+            border_style="green",
+        ))
+    except Exception as e:
+        error_console.print(terminal_panel(
+            f"[grey70]Target[/grey70] : [white]{target}[/white]\n"
+            "[grey70]Status[/grey70] : [red]failed[/red]\n\n"
+            f"[red]{e}[/red]",
+            "Install Failed",
+            border_style="red",
+        ))
+
+    print()
+
+
 REPRESENTATIVE_TOOLS = {
     "Web": "curl",
     "Forensics": "strings",
@@ -1206,9 +1256,9 @@ async def check_missing_tools():
     commands.add_column("Prompt", style="bright_cyan", no_wrap=True, width=1)
     commands.add_column("Command", style="white", no_wrap=True)
     commands.add_column("Description", style="grey70")
-    commands.add_row(">", "install", "install all missing tools")
-    commands.add_row(">", "install <domain>", "install one domain")
-    commands.add_row(">", "tools", "refresh tool status")
+    commands.add_row(">", "/install", "install all missing tools")
+    commands.add_row(">", "/install <domain>", "install one domain")
+    commands.add_row(">", "/tools", "refresh tool status")
 
     grid = Table.grid(expand=True)
     grid.add_column(ratio=2)
@@ -1317,7 +1367,7 @@ def cmd_banner():
     intro.add_row("[grey62]Version[/grey62]     : [white]1.0.0[/white]")
     intro.add_row("[grey62]Workspace[/grey62]   : [medium_purple1]/home/ctf-solver[/medium_purple1]")
     intro.add_row("[grey62]Mode[/grey62]        : [spring_green3]Interactive[/spring_green3]")
-    intro.add_row("[grey62]Hint[/grey62]        : type [bright_cyan]help[/bright_cyan] to view commands")
+    intro.add_row("[grey62]Hint[/grey62]        : type [bright_cyan]/help[/bright_cyan] to view commands")
 
     status = Table.grid(padding=(0, 1))
     status.add_column()
@@ -1325,15 +1375,15 @@ def cmd_banner():
     status.add_row("[grey62]* Knowledge Base[/grey62] : [spring_green3]loaded[/spring_green3]")
     status.add_row(f"[grey62]* Flag Format[/grey62]    : [medium_purple1]{settings.flag_format or 'unset'}[/medium_purple1]")
     status.add_row(f"[grey62]* Uploads[/grey62]        : [bright_cyan]{settings.upload_dir}[/bright_cyan]")
-    status.add_row("[grey62]* Commands[/grey62]       : [white]solve, tools, sessions, watch[/white]")
+    status.add_row("[grey62]* Commands[/grey62]       : [white]/solve, /tools, /sessions, /watch[/white]")
 
     tips = Table.grid(padding=(0, 1))
     tips.add_column()
-    tips.add_row("[bright_cyan]>[/bright_cyan] [white]solve <desc|file>[/white] [grey62]start a challenge[/grey62]")
-    tips.add_row("[bright_cyan]>[/bright_cyan] [white]tools [domain][/white]    [grey62]check tool availability[/grey62]")
-    tips.add_row("[bright_cyan]>[/bright_cyan] [white]sessions[/white]          [grey62]show active sessions[/grey62]")
-    tips.add_row("[bright_cyan]>[/bright_cyan] [white]watch <id>[/white]        [grey62]stream a trace[/grey62]")
-    tips.add_row("[bright_cyan]>[/bright_cyan] [white]clear[/white]             [grey62]redraw terminal[/grey62]")
+    tips.add_row("[bright_cyan]>[/bright_cyan] [white]/solve <desc|file>[/white] [grey62]start a challenge[/grey62]")
+    tips.add_row("[bright_cyan]>[/bright_cyan] [white]/tools [domain][/white]    [grey62]check tool availability[/grey62]")
+    tips.add_row("[bright_cyan]>[/bright_cyan] [white]/sessions[/white]          [grey62]show active sessions[/grey62]")
+    tips.add_row("[bright_cyan]>[/bright_cyan] [white]/watch <id>[/white]        [grey62]stream a trace[/grey62]")
+    tips.add_row("[bright_cyan]>[/bright_cyan] [white]/clear[/white]             [grey62]redraw terminal[/grey62]")
 
     grid = Table.grid(expand=True)
     grid.add_column(ratio=1)
@@ -1462,7 +1512,7 @@ async def cmd_flagformat():
 
 
 def normalize_command(cmd: str, args: str) -> tuple[str, str]:
-    """Support both slash commands and plain terminal commands."""
+    """Normalize slash command aliases."""
     cmd = cmd.lstrip("/").lower()
 
     if cmd == "scan":
@@ -1498,7 +1548,7 @@ async def run_interactive():
     """Main interactive CLI loop"""
     cmd_banner()
     await check_missing_tools()
-    console.print("[grey62]Type [bold bright_cyan]help[/bold bright_cyan] for commands. Slash commands still work.[/grey62]\n")
+    console.print("[grey62]Type [bold bright_cyan]/help[/bold bright_cyan] for commands.[/grey62]\n")
 
     while True:
         try:
@@ -1516,9 +1566,13 @@ async def run_interactive():
             continue
 
         parts = inp.split(maxsplit=1)
-        cmd = parts[0].lower()
+        raw_cmd = parts[0].lower()
         args = parts[1] if len(parts) > 1 else ""
-        cmd, args = normalize_command(cmd, args)
+        if not raw_cmd.startswith("/") and raw_cmd not in ("exit", "quit"):
+            await cmd_chat(inp)
+            continue
+
+        cmd, args = normalize_command(raw_cmd, args)
 
         if cmd in ("exit", "quit"):
             console.print("[grey62]Shutting down CTF Solver...[/grey62]")
@@ -1572,7 +1626,12 @@ async def run_interactive():
             await cmd_chat(args)
 
         else:
-            await cmd_chat(inp)
+            console.print(terminal_panel(
+                f"[red]Unknown command:[/red] [white]/{cmd}[/white]\n\n"
+                "[grey70]Type [white]/help[/white] to see available commands.[/grey70]",
+                "Invalid Command",
+                border_style="red",
+            ))
 
 
 def main():
