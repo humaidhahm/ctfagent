@@ -182,48 +182,69 @@ def terminal_panel(renderable, title: str, border_style: str = "cyan", **kwargs)
 
 
 def print_help():
-    """Print the neon terminal command menu."""
-    commands = Table(show_header=True, header_style="bold bright_cyan", box=None, padding=(0, 2, 0, 0))
-    commands.add_column("Command", style="bright_cyan", no_wrap=True)
-    commands.add_column("Args", style="medium_purple1", no_wrap=True)
-    commands.add_column("Description", style="grey78")
+    """Print a themed command dashboard."""
+    def command_group(rows: list[tuple[str, str, str]]) -> Table:
+        table = Table(show_header=False, box=None, padding=(0, 1, 0, 0), expand=True)
+        table.add_column("Prompt", style="bright_cyan", no_wrap=True, width=1)
+        table.add_column("Command", style="white", no_wrap=True)
+        table.add_column("Args", style="medium_purple1", no_wrap=True)
+        table.add_column("Description", style="grey70")
+        for cmd, args, desc in rows:
+            table.add_row(">", cmd, args, desc)
+        return table
 
-    help_items = [
-        ("solve", "<desc|file>", "Submit a CTF challenge to solve"),
-        ("flag", "", "Set the default flag format"),
-        ("llm", "", "Configure LLM providers and keys"),
-        ("sessions", "", "List active and recent sessions"),
-        ("view", "<id>", "View a session summary and trace"),
-        ("watch", "<id>", "Live-stream agent reasoning"),
-        ("writeup", "<id>", "Generate a solved-challenge writeup"),
-        ("benchmark", "", "Run known challenge checks"),
-        ("experience", "", "View the experience database"),
-        ("experience find", "<query>", "Search similar solved challenges"),
-        ("tools", "[domain]", "Check installed security tools"),
-        ("install", "[domain]", "Install missing tools"),
-        ("banner", "", "Display the dashboard"),
-        ("clear", "", "Clear screen and redraw dashboard"),
-        ("help", "", "Show this menu"),
-        ("exit", "", "Exit CTF Solver"),
+    solve_rows = [
+        ("solve", "<desc|file>", "submit a challenge"),
+        ("scan", "<desc|file>", "alias for solve"),
+        ("flag", "", "set flag format"),
+        ("writeup", "<id>", "generate writeup"),
     ]
-    for cmd, arg, desc in help_items:
-        commands.add_row(cmd, arg, desc)
-
-    examples = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
-    examples.add_column("Example", style="grey70")
-    examples.add_row("[bright_cyan]>[/bright_cyan] solve \"login form at http://target\"")
-    examples.add_row("[bright_cyan]>[/bright_cyan] solve ./challenge.elf")
-    examples.add_row("[bright_cyan]>[/bright_cyan] tools web")
-    examples.add_row("[bright_cyan]>[/bright_cyan] watch <session_id>")
+    session_rows = [
+        ("sessions", "", "list sessions"),
+        ("history", "", "alias for sessions"),
+        ("view", "<id>", "show session trace"),
+        ("watch", "<id>", "stream live trace"),
+    ]
+    tool_rows = [
+        ("tools", "[domain]", "check installed tools"),
+        ("install", "[domain]", "install missing tools"),
+        ("experience", "", "show solved history"),
+        ("experience find", "<query>", "search similar solves"),
+    ]
+    system_rows = [
+        ("chat", "[question]", "ask the LLM"),
+        ("llm", "", "configure providers"),
+        ("clear", "", "redraw terminal"),
+        ("exit", "", "quit"),
+    ]
 
     grid = Table.grid(expand=True)
-    grid.add_column(ratio=2)
+    grid.add_column(ratio=1)
     grid.add_column(ratio=1)
     grid.add_row(
-        terminal_panel(commands, "Command Menu"),
-        terminal_panel(examples, "Quick Runs"),
+        terminal_panel(command_group(solve_rows), "Challenges"),
+        terminal_panel(command_group(session_rows), "Sessions"),
     )
-    console.print(grid)
+    grid.add_row(
+        terminal_panel(command_group(tool_rows), "Tools & Memory"),
+        terminal_panel(command_group(system_rows), "System"),
+    )
+
+    examples = Table.grid(padding=(0, 1))
+    examples.add_column(style="grey70")
+    examples.add_row("[bright_cyan]>[/bright_cyan] [white]solve[/white] [medium_purple1]\"login form at http://target\"[/medium_purple1]")
+    examples.add_row("[bright_cyan]>[/bright_cyan] [white]tools[/white] [medium_purple1]web[/medium_purple1]")
+    examples.add_row("[bright_cyan]>[/bright_cyan] [white]watch[/white] [medium_purple1]<session_id>[/medium_purple1]")
+
+    console.print(Panel(
+        grid,
+        title="[bold bright_cyan]CTF SOLVER // HELP MENU[/bold bright_cyan]",
+        title_align="center",
+        border_style="bright_black",
+        box=box.ROUNDED,
+        padding=(1, 1),
+    ))
+    console.print(terminal_panel(examples, "Quick Runs", border_style="bright_black"))
 
 
 DOMAIN_COLORS = {
@@ -1169,6 +1190,46 @@ async def check_missing_tools():
 
     if total_missing == 0:
         return
+
+    console.print()
+
+    missing_table = Table(show_header=False, box=None, padding=(0, 1, 0, 0), expand=True)
+    missing_table.add_column("Prompt", style="bright_cyan", no_wrap=True, width=1)
+    missing_table.add_column("Domain", style="white", no_wrap=True)
+    missing_table.add_column("Missing Tools", style="grey70")
+    for domain, missing in sorted(missing_by_domain.items()):
+        color = DOMAIN_COLORS.get(domain.lower(), "white")
+        tools_str = ", ".join(sorted(missing))
+        missing_table.add_row(">", f"[{color}]{domain}[/{color}]", tools_str)
+
+    commands = Table(show_header=False, box=None, padding=(0, 1, 0, 0), expand=True)
+    commands.add_column("Prompt", style="bright_cyan", no_wrap=True, width=1)
+    commands.add_column("Command", style="white", no_wrap=True)
+    commands.add_column("Description", style="grey70")
+    commands.add_row(">", "install", "install all missing tools")
+    commands.add_row(">", "install <domain>", "install one domain")
+    commands.add_row(">", "tools", "refresh tool status")
+
+    grid = Table.grid(expand=True)
+    grid.add_column(ratio=2)
+    grid.add_column(ratio=1)
+    grid.add_row(
+        terminal_panel(missing_table, "Affected Domains", border_style="red"),
+        terminal_panel(commands, "Recovery Commands", border_style="bright_black"),
+    )
+
+    console.print(Panel(
+        grid,
+        title=f"[bold red]CTF SOLVER // {total_missing} MISSING TOOLS[/bold red]",
+        title_align="center",
+        border_style="bright_black",
+        box=box.ROUNDED,
+        padding=(1, 1),
+        subtitle="[grey62]Some solver capabilities may be limited until these tools are installed.[/grey62]",
+        subtitle_align="center",
+    ))
+    console.print()
+    return
 
     console.print()
     lines = []
