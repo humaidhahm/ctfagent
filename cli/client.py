@@ -19,7 +19,7 @@ from typing import Optional
 from dotenv import set_key
 from langchain_core.messages import SystemMessage, HumanMessage
 from backend.core.llm_client import get_llm, RotatingLLM
-from run import configure_llm_keys, ENV_FILE
+from run import ENV_FILE, get_env_value, set_env_value
 
 
 def _extract_json(text: str) -> tuple[dict | None, str]:
@@ -1511,6 +1511,111 @@ async def cmd_flagformat():
         set_default_flag_format(flag_format)
 
 
+LLM_PROVIDERS = [
+    ("nim", "NVIDIA NIM", "NVIDIA_NIM_API_KEYS"),
+    ("gemma", "Google AI / Gemma", "GOOGLE_API_KEYS"),
+    ("gemini", "Google AI / Gemini", "GOOGLE_API_KEYS"),
+]
+
+
+def _key_count(value: str) -> int:
+    return len([key for key in value.split(",") if key.strip() and key.strip() != "your_key_here"])
+
+
+def _llm_prompt(label: str) -> str:
+    return input(f"\033[36mctfsolver\033[0m \033[35mllm\033[0m {label} > ").strip()
+
+
+async def cmd_llm():
+    """Configure LLM provider and API key pools with themed UI."""
+    content = ENV_FILE.read_text() if ENV_FILE.exists() else ""
+    current = get_env_value(content, "LLM_PROVIDER") or settings.llm_provider or "nim"
+
+    provider_table = Table(show_header=False, box=None, padding=(0, 1, 0, 0), expand=True)
+    provider_table.add_column("Index", style="bright_cyan", no_wrap=True, width=3)
+    provider_table.add_column("Provider", style="white", no_wrap=True)
+    provider_table.add_column("Keys", style="grey70")
+    provider_table.add_column("Status", style="medium_purple1", no_wrap=True)
+
+    for index, (provider, label, key_name) in enumerate(LLM_PROVIDERS, start=1):
+        key_total = _key_count(get_env_value(content, key_name))
+        status = "active" if provider == current else "available"
+        provider_table.add_row(
+            str(index),
+            f"{label} [grey62]({provider})[/grey62]",
+            f"{key_total} configured",
+            status,
+        )
+
+    console.print(Panel(
+        provider_table,
+        title="[bold bright_cyan]CTF SOLVER // LLM CONFIG[/bold bright_cyan]",
+        title_align="center",
+        border_style="bright_black",
+        box=box.ROUNDED,
+        padding=(1, 1),
+        subtitle="[grey62]Select a provider number, or press Enter to keep the current provider.[/grey62]",
+        subtitle_align="center",
+    ))
+
+    selected = _llm_prompt("provider")
+    if selected:
+        try:
+            provider, label, key_name = LLM_PROVIDERS[int(selected) - 1]
+        except (ValueError, IndexError):
+            error_console.print(terminal_panel(
+                "[red]Invalid provider selection.[/red]\n\n[grey70]Run [white]/llm[/white] again and choose one of the displayed numbers.[/grey70]",
+                "LLM Config Error",
+                border_style="red",
+            ))
+            return
+    else:
+        provider, label, key_name = next(
+            (item for item in LLM_PROVIDERS if item[0] == current),
+            LLM_PROVIDERS[0],
+        )
+
+    existing_keys = get_env_value(content, key_name)
+    should_update_keys = _key_count(existing_keys) == 0
+    if not should_update_keys:
+        choice = _llm_prompt(f"update {key_name}? [y/N]").lower()
+        should_update_keys = choice in ("y", "yes")
+
+    if should_update_keys:
+        keys = _llm_prompt(f"{label} API keys (comma-separated)")
+        if not keys:
+            error_console.print(terminal_panel(
+                f"[red]{key_name} cannot be empty for {label}.[/red]",
+                "LLM Config Error",
+                border_style="red",
+            ))
+            return
+        content = set_env_value(content, key_name, keys)
+
+    content = set_env_value(content, "LLM_PROVIDER", provider)
+    ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
+    ENV_FILE.write_text(content)
+
+    os.environ["LLM_PROVIDER"] = provider
+    settings.llm_provider = provider
+    if key_name == "NVIDIA_NIM_API_KEYS":
+        os.environ[key_name] = get_env_value(content, key_name)
+        settings.nvidia_nim_api_keys = get_env_value(content, key_name)
+    else:
+        os.environ[key_name] = get_env_value(content, key_name)
+        settings.google_api_keys = get_env_value(content, key_name)
+
+    console.print(terminal_panel(
+        f"[grey70]Provider[/grey70] : [white]{label}[/white]\n"
+        f"[grey70]Mode[/grey70]     : [medium_purple1]{provider}[/medium_purple1]\n"
+        f"[grey70]Key Pool[/grey70] : [bright_cyan]{key_name}[/bright_cyan] "
+        f"[grey62]({_key_count(get_env_value(content, key_name))} configured)[/grey62]\n"
+        f"[grey70]Saved[/grey70]    : [spring_green3]{ENV_FILE}[/spring_green3]",
+        "LLM Config Saved",
+        border_style="green",
+    ))
+
+
 def normalize_command(cmd: str, args: str) -> tuple[str, str]:
     """Normalize slash command aliases."""
     cmd = cmd.lstrip("/").lower()
@@ -1619,8 +1724,7 @@ async def run_interactive():
             await cmd_flagformat()
 
         elif cmd == "llm":
-            content = ENV_FILE.read_text()
-            content = configure_llm_keys(content,config=True)
+            await cmd_llm()
 
         elif cmd == "chat":
             await cmd_chat(args)
