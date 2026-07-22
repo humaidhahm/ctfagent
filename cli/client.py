@@ -350,6 +350,92 @@ def format_event(event: dict) -> Text:
     return Text(f"{prefix} {json.dumps(data)[:200]}", style="white")
 
 
+def format_event(event: dict) -> Text:
+    """Format trace events without padded columns or decorative glyphs."""
+    etype = event.get("event_type", "unknown")
+    agent = event.get("agent", "?")
+    data = event.get("data", {})
+    ts = event.get("timestamp", "")[11:19] or "--:--:--"
+
+    color = EVENT_COLORS.get(etype, "white")
+    prefix = f"[{ts}] [{etype.upper()}] [{agent}]"
+
+    if etype == "classification":
+        cat = data.get("category", "?")
+        conf = data.get("confidence", 0)
+        return Text(f"{prefix} -> {cat} (confidence: {conf:.2f})", style=color)
+
+    if etype == "llm_reasoning":
+        raw = data.get("raw_output", "")[:1200]
+        reasoning = data.get("reasoning", "")
+        error = data.get("error", "")
+        if error:
+            return Text(f"{prefix} LLM error: {error}", style="bold red")
+
+        parsed, prefix_text = _extract_json(raw)
+        if parsed:
+            tool = parsed.get("tool", "")
+            args = parsed.get("args", {})
+            rsn = parsed.get("reasoning", reasoning) or reasoning
+            args_str = " ".join(f"{k}={v}" for k, v in args.items() if v)
+            lines = []
+            if prefix_text:
+                lines.append(prefix_text[:200])
+            if rsn:
+                lines.append(str(rsn))
+            if tool:
+                lines.append(f"tool {tool} {args_str}".rstrip())
+            return Text(f"{prefix} " + "\n  | ".join(lines), style=color)
+
+        return Text(f"{prefix} " + "\n  | ".join(raw.split("\n")[:6]), style=color)
+
+    if etype == "tool_call":
+        tool = data.get("tool", "?")
+        args = data.get("args", {})
+        if isinstance(args, str):
+            args = {}
+        args_str = " ".join(f"{k}={v}" for k, v in args.items() if v)
+        return Text(f"{prefix} tool {tool} {args_str}".rstrip(), style=color)
+
+    if etype == "tool_result":
+        success = data.get("success", False)
+        output = data.get("output", "")[:400]
+        error = data.get("error", "")
+        status = "ok" if success else "error"
+        if output:
+            out_preview = "\n  | ".join(output.split("\n")[:5])
+            return Text(f"{prefix} [{status}] {out_preview}", style=color)
+        if error:
+            return Text(f"{prefix} [{status}] {error[:200]}", style=color)
+        return Text(f"{prefix} [{status}] (no output)", style=color)
+
+    if etype == "hypothesis":
+        return Text(f"{prefix} {data.get('hypothesis', '')}", style=color)
+
+    if etype == "flag_candidate":
+        flags = data.get("flags", [])
+        method = data.get("method", "?")
+        return Text(f"{prefix} Found candidate: {flags} (via {method})", style="bold yellow")
+
+    if etype == "flag_validated":
+        return Text(f"{prefix} FLAG VALIDATED: {data.get('flag', '')}", style="bold green on black")
+
+    if etype == "error":
+        return Text(f"{prefix} {data.get('error', 'Unknown error')}", style="bold red")
+
+    if etype == "completed":
+        if data.get("solved", False):
+            return Text(f"{prefix} CHALLENGE SOLVED! Flag: {data.get('flag', '')}", style="bold green")
+        return Text(f"{prefix} Unsolved: {data.get('reason', '')}", style="bold red")
+
+    if etype == "difficulty":
+        diff = data.get("difficulty", "?")
+        mins = data.get("estimated_minutes", "?")
+        return Text(f"{prefix} Difficulty: {diff} (~{mins}min)", style="dim yellow")
+
+    return Text(f"{prefix} {json.dumps(data)[:200]}", style="white")
+
+
 def print_session_table(sessions: list[dict]):
     if not sessions:
         console.print("[dim]No sessions[/dim]")
