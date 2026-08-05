@@ -4,10 +4,26 @@ import asyncio
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, WebSocket
+from fastapi import (
+    APIRouter,
+    Body,
+    File,
+    Form,
+    HTTPException,
+    Path,
+    Query,
+    UploadFile,
+    WebSocket,
+)
 from loguru import logger
 
-from backend.schemas.api import SolveRequest, SolveResponse, HealthResponse, BenchmarkRequest
+from backend.schemas.api import (
+    BenchmarkRequest,
+    HealthResponse,
+    MemoryReferenceRequest,
+    SolveRequest,
+    SolveResponse,
+)
 from backend.ingestion.ingestor import ingest_challenge
 from backend.memory.session_store import session_store
 from backend.core.tool_checker import check_all_tools
@@ -15,6 +31,7 @@ from backend.config.settings import settings
 from backend.agents.supervisor import supervisor_graph
 from backend.api.websocket import websocket_handler
 from backend.core.llm_client import get_llm
+from backend.services.memory_client import MemoryServiceError, memory_client
 router = APIRouter()
 
 _task_registry: list = []
@@ -23,6 +40,15 @@ _task_registry: list = []
 def _cleanup_tasks():
     global _task_registry
     _task_registry = [t for t in _task_registry if not t.done()]
+
+
+def _raise_memory_http_error(error: MemoryServiceError) -> None:
+    """Translate upstream memory failures into stable API errors."""
+    if error.kind in {"disabled", "timeout", "unavailable"}:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    if error.status_code == 404:
+        raise HTTPException(status_code=404, detail="Memory writeup not found") from error
+    raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 async def _run_agent_async(initial_state: dict, session_id: str) -> None:
@@ -51,7 +77,49 @@ async def health_check() -> HealthResponse:
     tools = await check_all_tools()
     missing = [k for k, v in tools.items() if v is None]
     status = "degraded" if missing else "healthy"
-    return HealthResponse(status=status, tools=tools)
+
+    if not settings.memory_enabled:
+        memory = {"status": "disabled"}
+    else:
+        try:
+            memory = {"status": "healthy", **(await memory_client.health())}
+        except MemoryServiceError as error:
+            memory = {"status": "unavailable", "error": str(error)}
+            status = "degraded"
+
+    return HealthResponse(status=status, tools=tools, memory=memory)
+
+
+@router.get("/api/memory/search")
+async def search_memory_writeups(
+    query: str = Query(..., min_length=1, max_length=2000),
+    domain: Optional[str] = Query(None, min_length=1, max_length=128),
+    difficulty: Optional[str] = Query(None, min_length=1, max_length=64),
+    limit: int = Query(5, ge=1, le=50),
+    offset: int = Query(0, ge=0, le=100000),
+) -> dict:
+    try:
+        return await memory_client.search_writeups(
+            query, domain=domain, difficulty=difficulty, limit=limit, offset=offset
+        )
+    except MemoryServiceError as error:
+        _raise_memory_http_error(error)
+
+
+@router.get("/api/memory/writeup/{id}")
+async def get_memory_writeup(id: int = Path(..., ge=1)) -> dict:
+    try:
+        return await memory_client.get_writeup(id)
+    except MemoryServiceError as error:
+        _raise_memory_http_error(error)
+
+
+@router.post("/api/memory/references")
+async def fetch_memory_reference(request: MemoryReferenceRequest) -> dict:
+    try:
+        return await memory_client.fetch_reference(request.url)
+    except MemoryServiceError as error:
+        _raise_memory_http_error(error)
 
 
 @router.post("/api/solve", response_model=SolveResponse)

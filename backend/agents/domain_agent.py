@@ -250,6 +250,15 @@ async def run_domain_agent(
     available_tools: list[str],
 ) -> dict:
     node_name = NODE_NAME_MAP.get(agent_name, agent_name)
+    memory_tools = [
+        "memory_search_writeups",
+        "memory_get_writeup",
+        "memory_list_domains",
+        "memory_search_source_documents",
+        "memory_get_source_document",
+        "memory_fetch_web_reference",
+    ] if settings.memory_enabled else []
+    available_tools = list(dict.fromkeys([*available_tools, *memory_tools]))
     llm = get_llm(agent_name)
 
     manifest = state.get("manifest", {})
@@ -612,6 +621,13 @@ async def run_domain_agent(
         logger.error(f"Tool {tool_name} unexpected error: {e}")
         return {
             "observations": [f"Tool {tool_name} crashed: {e}"],
+            "tool_history": [{
+                "tool_name": tool_name,
+                "tool_input": tool_args,
+                "tool_output": f"error: {e}",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "success": False,
+            }],
             "iteration_count": iteration + 1,
             "current_agent": node_name,
             "trace_events": new_events + [{

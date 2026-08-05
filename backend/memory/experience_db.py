@@ -12,13 +12,13 @@ from backend.config.settings import settings
 class ExperienceRecord:
     def __init__(
         self,
-        name: str,
         description: str,
         category: str,
         tools_used: list[dict],
         observations: list[str],
         final_flag: str,
         iteration_count: int,
+        name: str = None,
         solved: bool = True,
         keywords: list[str] = None,
         record_id: str = None,
@@ -28,7 +28,7 @@ class ExperienceRecord:
         workflow: str = None,
     ):
         self.id = record_id or str(uuid.uuid4())
-        self.name = name
+        self.name = name or description.strip()[:120] or "unnamed-challenge"
         self.description = description
         self.category = category
         self.tools_used = tools_used
