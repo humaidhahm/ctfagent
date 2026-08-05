@@ -1,0 +1,21 @@
+services:
+  memory-db:
+    image: postgres:16-alpine
+    container_name: memory-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: memory
+      POSTGRES_USER: memory
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-memory-local-only}
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - memory_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memory -d memory"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  memory_postgres_data:
