@@ -98,6 +98,7 @@ from backend.ingestion.ingestor import ingest_challenge
 from backend.config.settings import settings
 from backend.core.flag_detector import detect_flag, validate_flag
 from backend.memory.session_store import session_store
+from backend.services.memory_client import MemoryServiceError, memory_client
 from backend.memory.experience_db import experience_db
 
 
@@ -140,6 +141,14 @@ def print_help():
         ("/experience", "", "View/manage experience database"),
         ("/experience_find", "<query>", "Search similar past challenges"),
         ("/experience_clear", "", "Clear all experiences"),
+        ("", "", ""),
+        ("[green]MCP MEMORY[/green]", "", ""),
+        ("/memory search", "<query>", "Search MCP writeups"),
+        ("/memory get", "<id>", "Retrieve a complete MCP writeup"),
+        ("/memory domains", "", "List MCP writeup domains"),
+        ("/memory sources", "<query>", "Search MCP source documents"),
+        ("/memory source", "<id>", "Retrieve an MCP source document"),
+        ("/memory fetch", "<url>", "Fetch a bounded MCP web reference"),
         ("", "", ""),
         ("[green]TOOLS[/green]", "", ""),
         ("/tools", "", "Check all available security tools"),
@@ -883,6 +892,8 @@ async def cmd_benchmark():
             f"[{cat_color}]{r.get('category', '?')}[/{cat_color}]",
             solved_str,
             str(r["iterations"]),
+
+
             f"[green]{r['flag']}[/green]" if r.get("flag") else "[dim]—[/dim]",
         )
 
@@ -891,6 +902,53 @@ async def cmd_benchmark():
     solved_count = sum(1 for r in results if r["solved"])
     console.print(f"\n[bold]Solve rate: {solved_count}/{len(results)} ({solved_count/len(results)*100:.1f}%)[/bold]")
 
+async def cmd_memory(args: str):
+    """Use the memory service through its MCP tools."""
+    parts = args.strip().split(maxsplit=1)
+    subcmd = parts[0].lower() if parts else "help"
+    value = parts[1].strip() if len(parts) > 1 else ""
+
+    calls: dict[str, tuple[str, dict]] = {
+        "domains": ("list_domains", {}),
+    }
+    if subcmd == "search":
+        if not value:
+            console.print("[red]Usage: /memory search <query>[/red]")
+            return
+        calls[subcmd] = ("search_writeups", {"query": value, "limit": 10})
+    elif subcmd == "get":
+        try:
+            calls[subcmd] = ("get_writeup", {"id": int(value)})
+        except ValueError:
+            console.print("[red]Usage: /memory get <numeric-id>[/red]")
+            return
+    elif subcmd == "sources":
+        if not value:
+            console.print("[red]Usage: /memory sources <query>[/red]")
+            return
+        calls[subcmd] = ("search_source_documents", {"query": value, "limit": 10})
+    elif subcmd == "source":
+        try:
+            calls[subcmd] = ("get_source_document", {"id": int(value)})
+        except ValueError:
+            console.print("[red]Usage: /memory source <numeric-id>[/red]")
+            return
+    elif subcmd == "fetch":
+        if not value:
+            console.print("[red]Usage: /memory fetch <url>[/red]")
+            return
+        calls[subcmd] = ("fetch_web_reference", {"url": value})
+    elif subcmd not in calls:
+        console.print("[yellow]Usage: /memory search|get|domains|sources|source|fetch ...[/yellow]")
+        return
+
+    tool_name, arguments = calls[subcmd]
+    try:
+        result = await memory_client.call_tool(tool_name, arguments)
+    except MemoryServiceError as error:
+        console.print(f"[red]Memory MCP error: {error}[/red]")
+        return
+    console.print_json(json.dumps(result, default=str))
 
 async def cmd_experience(args: str):
     """View/manage the experience database"""
@@ -1240,6 +1298,9 @@ async def run_interactive():
 
         elif cmd == "/install":
             await cmd_install(args)
+
+        elif cmd == "/memory":
+            await cmd_memory(args)
 
         elif cmd == "/experience":
             await cmd_experience(args)
