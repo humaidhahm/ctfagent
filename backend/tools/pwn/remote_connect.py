@@ -39,10 +39,14 @@ class RemoteConnectTool(BaseTool):
         payload = kwargs.pop("command", payload)
         payload = kwargs.pop("payload", payload)
         payload = kwargs.pop("cmd", payload)
-        timeout = kwargs.pop("timeout", 5)
+        timeout = int(kwargs.pop("timeout", 5))
         append_newline = kwargs.pop("newline", False)
+        if isinstance(append_newline, str):
+            append_newline = append_newline.lower() in ("true", "1", "yes")
         session_id = kwargs.pop("session_id", "")
         close_after = kwargs.pop("close_session", False)
+        if isinstance(close_after, str):
+            close_after = close_after.lower() in ("true", "1", "yes")
 
         if session_id:
             if close_after:

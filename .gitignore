@@ -27,3 +27,8 @@ data/
 # Node
 node_modules/
 .next/
+
+# Agents
+.codex
+AGENTS.md
+graphify-out

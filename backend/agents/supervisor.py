@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
-from langgraph.graph import StateGraph, END
-from typing import Literal
+from typing import Any
+from deepagents import create_deep_agent
 from loguru import logger
 
 from backend.core.state import AgentState
+from backend.core.llm_client import get_chat_model
 from backend.agents.classifier import classify_node
 from backend.agents.difficulty_estimator import difficulty_estimator_node
 from backend.agents.web_agent import web_agent_node
@@ -23,8 +24,21 @@ CATEGORY_ROUTE = {
     "pwn": "pwn_agent",
     "re": "re_agent",
     "osint": "misc_agent",
+    "ai": "misc_agent",
     "misc": "misc_agent",
 }
+
+ADDITIVE_STATE_KEYS = {
+    "tool_history",
+    "observations",
+    "candidate_flags",
+    "trace_events",
+}
+
+SUPERVISOR_PROMPT = """You are the CTFAgent supervisor.
+Coordinate CTF solving work by classifying the challenge, estimating difficulty,
+routing to the right specialist, and validating the final flag. Keep state
+updates concise and let specialist agents use their domain tools."""
 
 
 async def route_node(state: AgentState) -> dict:
@@ -104,35 +118,6 @@ async def flag_validation_node(state: AgentState) -> dict:
     }
 
 
-def build_supervisor_graph() -> StateGraph:
-    workflow = StateGraph(AgentState)
-
-    workflow.add_node("classify", classify_node)
-    workflow.add_node("difficulty_estimator", difficulty_estimator_node)
-    workflow.add_node("route", route_node)
-    for agent in DOMAIN_AGENTS:
-        workflow.add_node(agent, _get_agent_node(agent))
-    workflow.add_node("flag_validation", flag_validation_node)
-
-    workflow.set_entry_point("classify")
-
-    workflow.add_edge("classify", "difficulty_estimator")
-    workflow.add_edge("difficulty_estimator", "route")
-
-    workflow.add_conditional_edges("route", router, {
-        a: a for a in DOMAIN_AGENTS
-    } | {"classify": "classify"})
-
-    for agent in DOMAIN_AGENTS:
-        workflow.add_conditional_edges(agent, agent_looper, {
-            "flag_validation": "flag_validation",
-            agent: agent,
-        })
-
-    workflow.add_edge("flag_validation", END)
-    return workflow.compile()
-
-
 def _get_agent_node(name: str):
     nodes = {
         "web_agent": web_agent_node,
@@ -143,6 +128,81 @@ def _get_agent_node(name: str):
         "misc_agent": misc_agent_node,
     }
     return nodes[name]
+
+
+def _merge_state(state: AgentState, updates: dict[str, Any]) -> AgentState:
+    next_state = dict(state)
+
+    for key, value in updates.items():
+        if key in ADDITIVE_STATE_KEYS:
+            current = next_state.get(key, [])
+            if value is None:
+                value = []
+            next_state[key] = list(current) + list(value)
+        else:
+            next_state[key] = value
+
+    return next_state
+
+
+class DeepAgentSupervisor:
+    """Deep Agents-backed supervisor with the old async invoke contract."""
+
+    def __init__(self):
+        self.agent = None
+
+    def _ensure_agent(self):
+        if self.agent is not None:
+            return self.agent
+
+        self.agent = create_deep_agent(
+            model=get_chat_model("supervisor", temperature=0.0),
+            tools=[],
+            system_prompt=SUPERVISOR_PROMPT,
+        )
+        return self.agent
+
+    async def _run(self, initial_state: AgentState):
+        state = dict(initial_state)
+        self._ensure_agent()
+
+        for node in (classify_node, difficulty_estimator_node, route_node):
+            state = _merge_state(state, await node(state))
+            yield state
+
+        while True:
+            next_node = router(state)
+            if next_node == "classify":
+                state = _merge_state(state, await classify_node(state))
+                yield state
+                state = _merge_state(state, await route_node(state))
+                yield state
+                continue
+
+            state = _merge_state(state, await _get_agent_node(next_node)(state))
+            yield state
+            next_route = agent_looper(state)
+            if next_route == "flag_validation":
+                break
+
+        yield _merge_state(state, await flag_validation_node(state))
+
+    async def ainvoke(self, initial_state: AgentState) -> AgentState:
+        final_state = None
+        async for state in self._run(initial_state):
+            final_state = state
+        return final_state or dict(initial_state)
+
+    async def astream(self, initial_state: AgentState, stream_mode: str = "values"):
+        if stream_mode != "values":
+            raise ValueError("DeepAgentSupervisor only supports stream_mode='values'")
+
+        async for state in self._run(initial_state):
+            yield state
+
+
+def build_supervisor_graph() -> DeepAgentSupervisor:
+    return DeepAgentSupervisor()
 
 
 supervisor_graph = build_supervisor_graph()

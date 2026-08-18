@@ -27,6 +27,9 @@ async def difficulty_estimator_node(state: AgentState) -> dict:
         content = response.content.strip().replace("```json", "").replace("```", "").strip()
         parsed = json.loads(content)
         difficulty = parsed.get("difficulty", "Medium")
+        difficulty = difficulty.capitalize()
+        if difficulty not in ("Easy", "Medium", "Hard"):
+            difficulty = "Medium"
         est_minutes = parsed.get("estimated_minutes", 30)
         logger.info(f"Estimated difficulty: {difficulty} ({est_minutes} min)")
         return {

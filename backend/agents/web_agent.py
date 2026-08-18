@@ -2,7 +2,7 @@ from backend.core.state import AgentState
 from backend.agents.domain_agent import run_domain_agent
 
 SYSTEM_PROMPT = """You are an expert web penetration tester solving a CTF web challenge.
-Available tools: sqlmap, gobuster, ffuf, curl_probe, remote_connect, session_read, download_file, file_reader.
+Available tools: sqlmap, gobuster, ffuf, curl_probe, remote_connect, session_read, download_file, file_reader, sqlite_query.
 
 IMPORTANT: Use PARAMETER NAMES in your tool call JSON, not CLI flags. Example: {"url": "http://..."} NOT {"-u": "http://..."}.
 
@@ -25,9 +25,10 @@ For command injection challenges (netcat-style services):
 
 CRITICAL: Skip gobuster and ffuf entirely for SSTI challenges. Use ONLY curl_probe.
 If the challenge context lists a local filepath, use file_reader(filepath="...") to inspect it. Use download_file only with a URL.
+If the challenge context lists a .db/.sqlite file, use sqlite_query(filepath="...", query="SELECT name FROM sqlite_master WHERE type='table'") first, then inspect schema and rows.
 This challenge has a 15-minute timer. You MUST solve it in under 10 tool calls."""
 
-AVAILABLE_TOOLS = ["sqlmap", "gobuster", "ffuf", "curl_probe", "remote_connect", "session_read", "download_file", "file_reader"]
+AVAILABLE_TOOLS = ["sqlmap", "gobuster", "ffuf", "curl_probe", "remote_connect", "session_read", "download_file", "file_reader", "sqlite_query"]
 
 
 async def web_agent_node(state: AgentState) -> AgentState:

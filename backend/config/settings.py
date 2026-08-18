@@ -29,11 +29,16 @@ class Settings(BaseSettings):
 
     @staticmethod
     def _split_keys(value: str) -> list[str]:
-        return [
-            key.strip()
-            for key in value.split(",")
-            if key.strip() and key.strip() != "your_key_here"
-        ]
+        result = []
+        for key in value.split(","):
+            k = key.strip()
+            if not k or k == "your_key_here":
+                continue
+            if "=" in k and not k.startswith(("nvapi-", "sk-", "AIza")):
+                k = k.split("=", 1)[1].strip()
+            if k:
+                result.append(k)
+        return result
 
     @property
     def nim_keys(self) -> list[str]:
@@ -76,6 +81,7 @@ class Settings(BaseSettings):
     max_agent_iterations: int = 20
     max_tool_timeout_seconds: int = 300
     agent_temperature: float = 0.1
+    google_min_request_interval_seconds: float = 1.0
 
     docker_sandbox_image: str = "ctfagent-sandbox:latest"
     docker_sandbox_memory_limit: str = "512m"
