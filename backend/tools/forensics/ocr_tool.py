@@ -34,25 +34,25 @@ class OCRTool(BaseTool):
         if is_image:
             _console.print()
             _console.print(Panel(
-                f"[bold yellow]Image file:[/bold yellow] [cyan]{resolved}[/cyan]\n\n"
-                f"[dim]Options:[/dim]\n"
-                f"  [bold]v[/bold] — View image with [green]xdg-open[/green] then [yellow]type text manually[/yellow]\n"
-                f"  [bold]v+o[/bold] — View image then [green]run OCR automatically[/green]\n"
-                f"  [bold]o[/bold] — [green]Run OCR[/green] directly (skip viewer)",
-                border_style="yellow",
+                f"[bold #D29922]Image file:[/bold #D29922] [#00E5FF]{resolved}[/#00E5FF]\n\n"
+                f"[#9CA3AF]Options:[/#9CA3AF]\n"
+                f"  [bold]v[/bold] — View image with [#3FB950]xdg-open[/#3FB950] then [#D29922]type text manually[/#D29922]\n"
+                f"  [bold]v+o[/bold] — View image then [#3FB950]run OCR automatically[/#3FB950]\n"
+                f"  [bold]o[/bold] — [#3FB950]Run OCR[/#3FB950] directly (skip viewer)",
+                border_style="#D29922",
                 title="[bold]Image OCR — Manual Assistance[/bold]",
             ))
             choice = input("  Choice [v/v+o/o]: ").strip().lower()
 
             if choice in ("v", "v+o"):
-                _console.print(f"[dim]Opening [cyan]{resolved}[/cyan] with xdg-open...[/dim]")
+                _console.print(f"[#9CA3AF]Opening [#00E5FF]{resolved}[/#00E5FF] with xdg-open...[/#9CA3AF]")
                 subprocess.Popen(["xdg-open", resolved], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             if choice == "v":
-                _console.print("[yellow]Look at the image, then enter the text you see:[/yellow]")
+                _console.print("[#D29922]Look at the image, then enter the text you see:[/#D29922]")
                 user_text = input("  Text from image: ").strip()
                 if user_text:
-                    _console.print("[green]✓ Manual text captured[/green]")
+                    _console.print("[#3FB950]✓ Manual text captured[/#3FB950]")
                     return {
                         "success": True,
                         "output": f"{user_text}",
@@ -61,7 +61,7 @@ class OCRTool(BaseTool):
                     }
 
             if choice == "v+o":
-                _console.print("[dim]Press Enter after you've viewed the image to continue with OCR...[/dim]")
+                _console.print("[#9CA3AF]Press Enter after you've viewed the image to continue with OCR...[/#9CA3AF]")
                 input()
 
         text = ocr_image(resolved, lang)
