@@ -12,7 +12,7 @@ class ChecksecTool(BaseTool):
             return {"success": False, "output": "", "error": "No filepath provided", "command": "pwn/checksec_tool.py"}
         if filepath == "json":
             return {"success": False, "output": "", "error": "Invalid filepath 'json' — pass the actual binary path", "command": "pwn/checksec_tool.py"}
-        cmd = ["checksec", "--file", filepath]
+        cmd = ["checksec", filepath]
         result = await self._exec(cmd)
         if result["success"]:
             lines = result["output"].strip().split("\n")

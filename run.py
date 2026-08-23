@@ -26,16 +26,17 @@ from pathlib import Path
 class C:
     BOLD = '\033[1m'
     DIM = '\033[2m'
-    GREEN = '\033[0;32m'
-    BRIGHT_GREEN = '\033[1;32m'
-    CYAN = '\033[0;36m'
-    BRIGHT_CYAN = '\033[1;36m'
-    YELLOW = '\033[1;33m'
-    RED = '\033[0;31m'
-    BLUE = '\033[0;34m'
-    MAGENTA = '\033[0;35m'
-    ORANGE = '\033[0;33m'
-    WHITE = '\033[1;37m'
+    DARK_BLUE = '\033[38;2;16;23;37m'
+    GREEN = '\033[38;2;63;185;80m'
+    BRIGHT_GREEN = '\033[1;38;2;63;185;80m'
+    CYAN = '\033[38;2;0;229;255m'
+    BRIGHT_CYAN = '\033[1;38;2;0;229;255m'
+    YELLOW = '\033[38;2;210;153;34m'
+    RED = '\033[38;2;248;81;73m'
+    BLUE = DARK_BLUE
+    MAGENTA = '\033[38;2;168;85;247m'
+    ORANGE = YELLOW
+    WHITE = '\033[38;2;230;237;243m'
     NC = '\033[0m'
     CHECK = f'{GREEN}✔{NC}'
     CROSS = f'{RED}✘{NC}'
@@ -369,16 +370,22 @@ def configured_key_counts(content: str) -> dict[str, int]:
 
 
 def run_cmd(cmd, capture=False, check=False, timeout=120):
-    try:
-        result = subprocess.run(
-            cmd, capture_output=capture, text=True, timeout=timeout
-        )
-        if check and result.returncode != 0:
-            return None
-        return result
-    except Exception:
-        return None
+    result = subprocess.run(
+        cmd,
+        capture_output=capture,
+        text=True,
+        timeout=timeout,
+    )
 
+    if check and result.returncode != 0:
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            cmd,
+            result.stdout,
+            result.stderr,
+        )
+
+    return result
 def check_tool(binary, apt_pkg=None):
     if shutil.which(binary):
         return True
@@ -980,4 +987,26 @@ def main():
 
 
 if __name__ == '__main__':
+    import sys
+    import atexit
+
+
+    def setup_terminal():
+        # Dark blue background
+        sys.stdout.write("\033[48;2;10;15;35m")
+
+        # Light text
+        sys.stdout.write("\033[38;2;230;240;255m")
+
+        sys.stdout.flush()
+
+
+    def restore_terminal():
+        sys.stdout.write("\033[0m")
+        sys.stdout.flush()
+
+
+    setup_terminal()
+    atexit.register(restore_terminal)
+
     main()

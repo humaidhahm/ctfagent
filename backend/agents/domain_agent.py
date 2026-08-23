@@ -208,6 +208,34 @@ def _consecutive_identical_calls(
     return count
 
 
+def _consecutive_identical_failures(
+    tool_history: list[dict],
+    tool_name: str,
+    tool_args: dict,
+) -> int:
+    """Count previous consecutive identical failed calls with the same error."""
+    signature = _tool_call_signature(tool_name, tool_args)
+    count = 0
+    first_error = None
+    for call in reversed(tool_history):
+        if _tool_call_signature(
+            call.get("tool_name", ""),
+            call.get("tool_input", {}),
+        ) != signature:
+            break
+        if call.get("success", True):
+            break
+
+        error = call.get("tool_error", "")
+        if first_error is None:
+            first_error = error
+        elif error != first_error:
+            break
+
+        count += 1
+    return count
+
+
 def _apply_tool_context_defaults(
     tool_name: str,
     tool_args: dict,
@@ -217,6 +245,7 @@ def _apply_tool_context_defaults(
     """Fill obvious missing args from challenge context and repair common tool mixups."""
     target_url = manifest.get("target_url")
     url_tools = {"curl_probe", "sqlmap", "gobuster", "ffuf", "download_file"}
+    local_file_keys = ("filepath", "file", "filename", "path")
 
     if (
         tool_name == "download_file"
@@ -225,6 +254,11 @@ def _apply_tool_context_defaults(
         and "file_reader" in available_tools
     ):
         return "file_reader", {"filepath": tool_args["filepath"]}
+
+    if tool_name == "session_read" and "file_reader" in available_tools:
+        for key in local_file_keys:
+            if tool_args.get(key):
+                return "file_reader", {"filepath": tool_args[key]}
 
     if tool_name in url_tools and not tool_args.get("url") and target_url:
         tool_args["url"] = target_url
@@ -573,6 +607,23 @@ async def run_domain_agent(
     # Hard loop breaker: reject repeated identical experiments, not useful retries
     # with new arguments.
     identical_call_count = _consecutive_identical_calls(tool_history, tool_name, tool_args)
+    identical_failure_count = _consecutive_identical_failures(tool_history, tool_name, tool_args)
+    if identical_failure_count >= 2:
+        logger.warning(f"Repeated failure detected: {tool_name} called {identical_failure_count} times with identical args and error")
+        return {
+            "observations": [f"{tool_name} already failed {identical_failure_count} times with the same arguments and same error. Do not repeat it; choose a different tool, modify the arguments, or report the blocker."],
+            "iteration_count": iteration + 1,
+            "current_agent": node_name,
+            "current_hypothesis": f"Strategy rejected: repeated failed {tool_name} call. Need different tool or arguments.",
+            "trace_events": new_events + [{
+                "event_type": "tool_result",
+                "agent": agent_name,
+                "data": {"tool": tool_name, "success": False, "error": "Repeated failed tool call rejected."},
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "iteration": iteration,
+            }],
+        }
+
     if identical_call_count >= 3:
         logger.warning(f"Loop detected: {tool_name} called {identical_call_count + 1} times with identical args")
         return {
@@ -597,6 +648,14 @@ async def run_domain_agent(
     except TypeError as e:
         logger.warning(f"Tool {tool_name} called with invalid args: {e}")
         return {
+            "tool_history": [{
+                "tool_name": tool_name,
+                "tool_input": tool_args,
+                "tool_output": "",
+                "tool_error": str(e)[:1000],
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "success": False,
+            }],
             "observations": [f"Tool {tool_name} error: {e}. Try different arguments."],
             "iteration_count": iteration + 1,
             "current_agent": node_name,
@@ -611,6 +670,14 @@ async def run_domain_agent(
     except Exception as e:
         logger.error(f"Tool {tool_name} unexpected error: {e}")
         return {
+            "tool_history": [{
+                "tool_name": tool_name,
+                "tool_input": tool_args,
+                "tool_output": "",
+                "tool_error": str(e)[:1000],
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "success": False,
+            }],
             "observations": [f"Tool {tool_name} crashed: {e}"],
             "iteration_count": iteration + 1,
             "current_agent": node_name,
@@ -685,6 +752,7 @@ async def run_domain_agent(
         "tool_name": tool_name,
         "tool_input": tool_args,
         "tool_output": tool_result.get("output", "")[:5000],
+        "tool_error": tool_result.get("error", "")[:1000],
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "success": tool_result.get("success", False),
     })

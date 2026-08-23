@@ -38,14 +38,14 @@ class DownloadFileTool(BaseTool):
                     filepath = os.path.join(out_dir, filename)
 
                     progress = Progress(
-                        TextColumn("[cyan]{task.description}"),
+                        TextColumn("[#00E5FF]{task.description}"),
                         BarColumn(),
                         DownloadColumn(),
                         TransferSpeedColumn(),
                         TimeRemainingColumn(),
                     )
                     with progress:
-                        task = progress.add_task(f"[cyan]Downloading {filename}", total=total)
+                        task = progress.add_task(f"[#00E5FF]Downloading {filename}", total=total)
                         with open(filepath, "wb") as f:
                             async for chunk in resp.aiter_bytes():
                                 f.write(chunk)
