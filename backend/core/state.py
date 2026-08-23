@@ -1,4 +1,4 @@
-from typing import TypedDict, Annotated, Optional, List, Any
+from typing import TypedDict, Annotated, Optional, List, Any, NotRequired
 import operator
 
 
@@ -6,6 +6,7 @@ class ToolCall(TypedDict):
     tool_name: str
     tool_input: dict
     tool_output: str
+    tool_error: NotRequired[str]
     timestamp: str
     success: bool
 
