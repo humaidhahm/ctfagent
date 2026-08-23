@@ -6,6 +6,7 @@ Interactive CLI (Metasploit-style)
 
 import asyncio
 import json
+from prompt_toolkit import prompt
 import os
 import select
 import shutil
@@ -60,9 +61,9 @@ def _extract_json(text: str) -> tuple[dict | None, str]:
 
 
 # Enable command history (up/down arrow recall)
+HISTFILE = os.path.expanduser("~/.ctfagent_history")
 try:
     import readline
-    HISTFILE = os.path.expanduser("~/.ctfagent_history")
     try:
         readline.read_history_file(HISTFILE)
     except FileNotFoundError:
@@ -71,6 +72,206 @@ try:
     atexit.register(lambda: readline.write_history_file(HISTFILE))
 except ImportError:
     pass
+
+_prompt_session = None
+
+
+def _get_prompt_session():
+    global _prompt_session
+    if _prompt_session is None:
+        try:
+            from prompt_toolkit import PromptSession
+            from prompt_toolkit.history import FileHistory
+
+            _prompt_session = PromptSession(history=FileHistory(HISTFILE))
+        except Exception:
+            _prompt_session = False
+    return _prompt_session if _prompt_session else None
+
+
+def decode_ansi_sequence(seq_str: str, history: list = None) -> str:
+    """Decodes ANSI escape sequences and MSVCRT key codes into line input text.
+
+    Decodes sequences such as ^[[A, ^[[B, ^[[C, ^[[D, ^[[5~, ^[[6~ without returning
+    or displaying raw sequence characters.
+    """
+    if not history:
+        history = []
+        if os.path.exists(HISTFILE):
+            try:
+                with open(HISTFILE, "r", encoding="utf-8", errors="ignore") as f:
+                    history = [line.rstrip("\r\n") for line in f if line.rstrip("\r\n")]
+            except Exception:
+                pass
+
+    buf = []
+    cursor = 0
+    hist_idx = len(history)
+    saved_draft = ""
+
+    i = 0
+    n = len(seq_str)
+    while i < n:
+        ch = seq_str[i]
+        # MSVCRT Windows key prefix
+        if ch in ('\xe0', '\x00') and i + 1 < n:
+            code = seq_str[i + 1]
+            i += 2
+            if code == 'H':  # Up Arrow
+                if history:
+                    if hist_idx == len(history):
+                        saved_draft = "".join(buf)
+                    if hist_idx > 0:
+                        hist_idx -= 1
+                        buf = list(history[hist_idx])
+                        cursor = len(buf)
+            elif code == 'P':  # Down Arrow
+                if history:
+                    if hist_idx < len(history) - 1:
+                        hist_idx += 1
+                        buf = list(history[hist_idx])
+                        cursor = len(buf)
+                    elif hist_idx == len(history) - 1:
+                        hist_idx = len(history)
+                        buf = list(saved_draft)
+                        cursor = len(buf)
+            elif code == 'K':  # Left Arrow
+                if cursor > 0:
+                    cursor -= 1
+            elif code == 'M':  # Right Arrow
+                if cursor < len(buf):
+                    cursor += 1
+            elif code == 'I':  # Page Up
+                if history:
+                    if hist_idx == len(history):
+                        saved_draft = "".join(buf)
+                    hist_idx = max(0, hist_idx - 5)
+                    buf = list(history[hist_idx])
+                    cursor = len(buf)
+            elif code == 'Q':  # Page Down
+                if history:
+                    if hist_idx < len(history) - 1:
+                        hist_idx = min(len(history) - 1, hist_idx + 5)
+                        buf = list(history[hist_idx])
+                        cursor = len(buf)
+                    elif hist_idx == len(history) - 1:
+                        hist_idx = len(history)
+                        buf = list(saved_draft)
+                        cursor = len(buf)
+            continue
+
+        # ANSI Escape sequences
+        if ch == '\x1b':
+            if i + 2 < n and seq_str[i + 1:i + 3] in ('[A', 'OA'):  # Up Arrow
+                i += 3
+                if history:
+                    if hist_idx == len(history):
+                        saved_draft = "".join(buf)
+                    if hist_idx > 0:
+                        hist_idx -= 1
+                        buf = list(history[hist_idx])
+                        cursor = len(buf)
+                continue
+            elif i + 2 < n and seq_str[i + 1:i + 3] in ('[B', 'OB'):  # Down Arrow
+                i += 3
+                if history:
+                    if hist_idx < len(history) - 1:
+                        hist_idx += 1
+                        buf = list(history[hist_idx])
+                        cursor = len(buf)
+                    elif hist_idx == len(history) - 1:
+                        hist_idx = len(history)
+                        buf = list(saved_draft)
+                        cursor = len(buf)
+                continue
+            elif i + 2 < n and seq_str[i + 1:i + 3] in ('[C', 'OC'):  # Right Arrow
+                i += 3
+                if cursor < len(buf):
+                    cursor += 1
+                continue
+            elif i + 2 < n and seq_str[i + 1:i + 3] in ('[D', 'OD'):  # Left Arrow
+                i += 3
+                if cursor > 0:
+                    cursor -= 1
+                continue
+            elif i + 3 < n and seq_str[i + 1:i + 4] == '[5~':  # Page Up
+                i += 4
+                if history:
+                    if hist_idx == len(history):
+                        saved_draft = "".join(buf)
+                    hist_idx = max(0, hist_idx - 5)
+                    buf = list(history[hist_idx])
+                    cursor = len(buf)
+                continue
+            elif i + 3 < n and seq_str[i + 1:i + 4] == '[6~':  # Page Down
+                i += 4
+                if history:
+                    if hist_idx < len(history) - 1:
+                        hist_idx = min(len(history) - 1, hist_idx + 5)
+                        buf = list(history[hist_idx])
+                        cursor = len(buf)
+                    elif hist_idx == len(history) - 1:
+                        hist_idx = len(history)
+                        buf = list(saved_draft)
+                        cursor = len(buf)
+                continue
+            else:
+                j = i + 1
+                while j < n and not seq_str[j].isalpha() and seq_str[j] != '~':
+                    j += 1
+                i = j + 1 if j < n else n
+                continue
+
+        if ch in ('\r', '\n'):
+            break
+        elif ch in ('\x08', '\x7f'):
+            if cursor > 0:
+                buf.pop(cursor - 1)
+                cursor -= 1
+            i += 1
+        elif ch == '\x03':
+            raise KeyboardInterrupt()
+        elif ch == '\x04':
+            raise EOFError()
+        elif ord(ch) >= 32:
+            buf.insert(cursor, ch)
+            cursor += 1
+            i += 1
+        else:
+            i += 1
+
+    return "".join(buf)
+
+
+def safe_input(prompt_text: str = "") -> str:
+    """Read a line of user input, decoding ANSI escape sequences (arrow keys, Page Up/Down).
+
+    Prevents raw sequence output such as ^[[A, ^[[B, ^[[C, ^[[D, ^[[5~, ^[[6~.
+    Supports Up/Down Arrow history navigation, Left/Right Arrow cursor movement, Page Up/Down.
+    """
+    if sys.stdin.isatty():
+        session = _get_prompt_session()
+        if session is not None:
+            try:
+                from prompt_toolkit.formatted_text import ANSI
+
+                return session.prompt(ANSI(prompt_text))
+            except (EOFError, KeyboardInterrupt):
+                raise
+            except Exception:
+                pass
+
+    try:
+        raw_line = input(prompt_text)
+    except (EOFError, KeyboardInterrupt):
+        raise
+
+    if "\x1b" in raw_line or "\xe0" in raw_line or "^[" in raw_line:
+        raw_line = raw_line.replace("^[", "\x1b")
+        return decode_ansi_sequence(raw_line)
+
+    return raw_line
+
 
 # Redirect loguru to file BEFORE any backend imports
 import loguru
@@ -593,7 +794,7 @@ def edit_summary(summary: dict):
 
         console.print("0. Done")
 
-        choice = input("> ").strip()
+        choice = safe_input("> ").strip()
 
         if choice == "0":
             return
@@ -617,7 +818,7 @@ def edit_summary(summary: dict):
         if multiline:
             value = read_multiline(f"New {label}:")
         else:
-            value = input(f"New {label}: ")
+            value = safe_input(f"New {label}: ")
 
         summary[key] = value
 
@@ -666,7 +867,7 @@ def read_multiline(prompt=""):
         print(prompt)
     print("(Finish by pressing Enter twice)\n")
 
-    return _read_lines_until_double_blank(input, _stdin_has_pending_input)
+    return _read_lines_until_double_blank(safe_input, _stdin_has_pending_input)
 
 async def cmd_solve(args: str):
     """Solve a CTF challenge"""
@@ -699,7 +900,7 @@ async def cmd_solve(args: str):
     flag_format = settings.flag_format or ""
     max_retries = 3
     if flag_format == "" or flag_format.strip().lower() == "none":
-        flag_format = input("Error: Flag format not provided. Enter the flag format:")
+        flag_format = safe_input("Error: Flag format not provided. Enter the flag format:")
         set_default_flag_format(flag_format)
 
     for attempt in range(1, max_retries + 1):
@@ -843,7 +1044,7 @@ async def cmd_solve(args: str):
 
                 console.print()
                 console.print("[bold #00E5FF]Is this flag correct?[/bold #00E5FF]")
-                confirm = input("  [y/N] ").strip().lower()
+                confirm = safe_input("  [y/N] ").strip().lower()
                 if confirm in ("y", "yes"):
                     console.print(f"\n[bold #3FB950]✓ Flag confirmed![/bold #3FB950]")
                     return
@@ -1442,62 +1643,9 @@ def cmd_banner():
 
 
 def read_input_line() -> str | None:
-    """Read input — single line or multi-line paste with append support."""
-
-    try:
-        first = input(f"{ANSI_GREEN}┃ ctfagent{ANSI_RESET}{ANSI_WHITE} >{ANSI_RESET} ")
-    except (EOFError, KeyboardInterrupt):
-        return None
-
-    if not first:
-        return ""
-
-    lines = [first.strip()]
-    pasted = False
-
-    # Bypass GNU readline's internal buffer by reading directly from a raw fd.
-    # input()/readline reads ahead and may consume paste data into its own
-    # buffer, making it invisible to select.select on sys.stdin.
-    try:
-        fd = os.open("/dev/stdin", os.O_RDONLY | os.O_NONBLOCK)
-        try:
-            raw = os.read(fd, 65536)
-            if raw:
-                pasted = True
-                for raw_line in raw.split(b"\n"):
-                    stripped = raw_line.decode("utf-8", errors="replace").strip()
-                    if stripped:
-                        lines.append(stripped)
-        finally:
-            os.close(fd)
-    except (OSError, IOError):
-        pass
-
-    if pasted:
-        console.print(Panel(
-            "\n".join(lines),
-            border_style="#9CA3AF",
-            title="Pasted content",
-        ))
-        console.print("[#9CA3AF]Add more lines or press [bold]Enter[/bold] twice to execute.[/#9CA3AF]")
-        while True:
-            sys.stdout.write(f"{ANSI_GREEN}┃ append{ANSI_RESET}{ANSI_WHITE} >{ANSI_RESET} ")
-            sys.stdout.flush()
-            try:
-                more = input()
-            except (EOFError, KeyboardInterrupt):
-                break
-            if not more:
-                break
-            lines.append(more.strip())
-
-    return "\n".join(lines)
-
-
-def read_input_line() -> str | None:
     """Read input with the CTF Solver neon prompt."""
     try:
-        first = input(f"{ANSI_CYAN}ctfsolver{ANSI_RESET} {ANSI_PURPLE}~{ANSI_RESET}{ANSI_WHITE} >{ANSI_RESET} ")
+        first = safe_input(f"{ANSI_CYAN}ctfsolver{ANSI_RESET} {ANSI_PURPLE}~{ANSI_RESET}{ANSI_WHITE} >{ANSI_RESET} ")
     except (EOFError, KeyboardInterrupt):
         return None
 
@@ -1530,7 +1678,7 @@ def read_input_line() -> str | None:
             sys.stdout.write(f"{ANSI_CYAN}append{ANSI_RESET} {ANSI_PURPLE}~{ANSI_RESET}{ANSI_WHITE} >{ANSI_RESET} ")
             sys.stdout.flush()
             try:
-                more = input()
+                more = safe_input()
             except (EOFError, KeyboardInterrupt):
                 break
             if not more:
@@ -1541,7 +1689,7 @@ def read_input_line() -> str | None:
 
 
 async def cmd_flagformat():
-    flag_format = input("Enter the new flag format. Enter to skip.")
+    flag_format = safe_input("Enter the new flag format. Enter to skip.")
     if flag_format != "":
         set_default_flag_format(flag_format)
 
@@ -1558,7 +1706,7 @@ def _key_count(value: str) -> int:
 
 
 def _llm_prompt(label: str) -> str:
-    return input(f"{ANSI_CYAN}ctfsolver{ANSI_RESET} {ANSI_PURPLE}llm{ANSI_RESET} {label} > ").strip()
+    return safe_input(f"{ANSI_CYAN}ctfsolver{ANSI_RESET} {ANSI_PURPLE}llm{ANSI_RESET} {label} > ").strip()
 
 
 async def cmd_llm():
@@ -1675,7 +1823,7 @@ async def cmd_chat(args: str):
     """Ask the configured LLM a question without starting a solve session."""
     question = args.strip()
     if not question:
-        question = input("Ask CTF Solver: ").strip()
+        question = safe_input("Ask CTF Solver: ").strip()
     if not question:
         return
 
