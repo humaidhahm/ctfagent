@@ -987,4 +987,26 @@ def main():
 
 
 if __name__ == '__main__':
+    import sys
+    import atexit
+
+
+    def setup_terminal():
+        # Dark blue background
+        sys.stdout.write("\033[48;2;10;15;35m")
+
+        # Light text
+        sys.stdout.write("\033[38;2;230;240;255m")
+
+        sys.stdout.flush()
+
+
+    def restore_terminal():
+        sys.stdout.write("\033[0m")
+        sys.stdout.flush()
+
+
+    setup_terminal()
+    atexit.register(restore_terminal)
+
     main()

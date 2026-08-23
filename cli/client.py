@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-
+from cli.terminal import setup_terminal
 from dotenv import set_key
 from langchain_core.messages import SystemMessage, HumanMessage
 from backend.core.llm_client import get_llm, refresh_llm_runtime, RotatingLLM
@@ -1777,6 +1777,7 @@ async def run_interactive():
 
 def main():
     import asyncio
+    setup_terminal()
     signal.signal(signal.SIGINT, _signal_handler)
     signal.signal(signal.SIGTERM, _signal_handler)
     asyncio.run(run_interactive())
