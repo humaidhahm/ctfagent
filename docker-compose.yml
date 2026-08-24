@@ -8,12 +8,19 @@ services:
     environment:
       CTFAGENT_DOCKER: "1"
       CTFAGENT_ENV_FILE: /app/data/.env
+      MEMORY_SERVICE_URL: http://memory:3000
+      MEMORY_ENABLED: ${MEMORY_ENABLED:-false}
+      MEMORY_TIMEOUT_SECONDS: ${MEMORY_TIMEOUT_SECONDS:-5}
+      MEMORY_API_TOKEN: ${MEMORY_API_TOKEN:-}
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
     ports:
       - "8000:8000"
     command: ["python", "run.py", "--docker"]
+    depends_on:
+      memory:
+        condition: service_healthy
     profiles: ["cli"]
 
   api:
@@ -23,6 +30,10 @@ services:
     environment:
       CTFAGENT_DOCKER: "1"
       CTFAGENT_ENV_FILE: /app/data/.env
+      MEMORY_SERVICE_URL: http://memory:3000
+      MEMORY_ENABLED: ${MEMORY_ENABLED:-false}
+      MEMORY_TIMEOUT_SECONDS: ${MEMORY_TIMEOUT_SECONDS:-5}
+      MEMORY_API_TOKEN: ${MEMORY_API_TOKEN:-}
     ports:
       - "8000:8000"
     command: ["python", "run.py", "--docker-api"]
@@ -30,4 +41,72 @@ services:
       - ./data:/app/data
       - ./uploads:/app/uploads
       - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      memory:
+        condition: service_healthy
     profiles: ["api"]
+
+  memory-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: memory
+      POSTGRES_USER: memory
+      POSTGRES_PASSWORD: ${MEMORY_DB_PASSWORD:-memory-local-only}
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - memory_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memory -d memory"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    profiles: ["api", "memory", "cli"]
+
+  memory:
+    build: ./services/memory
+    environment:
+      PORT: "3000"
+      PGHOST: memory-db
+      PGPORT: "5432"
+      PGDATABASE: memory
+      PGUSER: memory
+      PGPASSWORD: ${MEMORY_DB_PASSWORD:-memory-local-only}
+      CSV_PATH: /app/data/picoctf_writeups_real.csv
+      PICOCTF_ARCHIVE_PATH: /app/data/picoCTF__picoCTF.tar.gz
+      MEMORY_API_TOKEN: ${MEMORY_API_TOKEN:-}
+      MEMORY_REQUIRE_AUTH: ${MEMORY_REQUIRE_AUTH:-false}
+      MEMORY_CORS_ORIGINS: ${MEMORY_CORS_ORIGINS:-}
+    volumes:
+      - type: bind
+        source: ${MEMORY_CSV_PATH:-./data/missing-picoctf-writeups.csv}
+        target: /app/data/picoctf_writeups_real.csv
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MEMORY_ARCHIVE_PATH:-./data/missing-picoCTF-archive.tar.gz}
+        target: /app/data/picoCTF__picoCTF.tar.gz
+        read_only: true
+        bind:
+          create_host_path: false
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      memory-db:
+        condition: service_healthy
+    command: ["sh", "-c", "bun run db:migrate && bun run data:import && bun run start"]
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - "fetch('http://127.0.0.1:3000/mcp').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    profiles: ["api", "memory", "cli"]
+
+volumes:
+  memory_postgres_data:

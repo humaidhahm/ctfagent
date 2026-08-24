@@ -95,6 +95,11 @@ class Settings(BaseSettings):
     upload_dir: str = "./uploads"
     session_ttl_seconds: int = 3600
 
+    memory_service_url: str = "http://127.0.0.1:3001"
+    memory_timeout_seconds: float = 5.0
+    memory_enabled: bool = False
+    memory_api_token: str = ""
+
     model_config = {"env_prefix": "", "extra": "ignore", "env_file": _ENV_PATH}
 
 

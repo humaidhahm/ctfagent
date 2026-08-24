@@ -1,5 +1,11 @@
-from pydantic import BaseModel
 from typing import Optional, Literal
+
+from pydantic import BaseModel, Field
+
+
+class MemoryReferenceRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=2048)
+
 
 
 class SolveRequest(BaseModel):
@@ -53,3 +59,4 @@ class BenchmarkRequest(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     tools: dict
+    memory: Optional[dict] = None

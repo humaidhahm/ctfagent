@@ -1,0 +1,44 @@
+{
+"name": "memory",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP-compatible NestJS memory API for picoCTF writeups and bounded web references",
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "nest build",
+    "start": "bun dist/main.js",
+    "start:node": "node dist/main.js",
+    "start:dev": "nest start --watch",
+    "db:migrate": "bun src/database/migrate.ts",
+    "data:import": "bun src/ingest/import-data.ts",
+    "data:setup": "bun run db:migrate && bun run data:import",
+    "test": "jest --runInBand",
+    "test:jest": "jest --runInBand"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "csv-parse": "^6.1.0",
+    "dotenv": "^16.6.1",
+    "pg": "^8.16.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "tar": "^7.4.3"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.0.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.5",
+    "@types/supertest": "^6.0.3",
+    "jest": "^30.0.0",
+    "supertest": "^7.1.4",
+    "ts-jest": "^29.4.1",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,22 +1,32 @@
 import hashlib
+import mimetypes
 import os
 import re
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
+
 import aiofiles
-import magic
 import httpx
 from loguru import logger
+magic = None  # libmagic is optional; mimetypes keeps Windows imports safe.
 
 from backend.core.manifest import ChallengeManifest, FileAttachment, ChallengeCategory
 
 
-URL_REGEX = re.compile(r'https?://[^\s\'\"<>]+')
+URL_REGEX = re.compile(r'https?://[^\s\'"<>]+')
 IP_PORT_REGEX = re.compile(r'(\d{1,3}(?:\.\d{1,3}){3}):(\d+)')
 HOST_PORT_REGEX = re.compile(r'(?:host|server|connect to)\s*[:\s]+([a-zA-Z0-9.-]+)\s*(?:port|:)\s*(\d+)', re.IGNORECASE)
 NC_REGEX = re.compile(r'(?:^|\s)(?:nc|ncat)\s+(?:-[a-zA-Z0-9]+\s+)*([a-zA-Z0-9._-]+)\s+(\d+)')
 FLAG_FORMAT_REGEX = re.compile(r'((?:[A-Za-z0-9_]+)?(?:CTF|flag|FLAG)\{[^}]+\})')
+def _detect_mime_type(filepath: str) -> str:
+    if magic is not None:
+        try:
+            return magic.from_file(filepath, mime=True)
+        except Exception:
+            pass
+    return mimetypes.guess_type(filepath)[0] or "application/octet-stream"
+
 
 
 async def compute_sha256(filepath: str) -> str:
@@ -29,8 +39,8 @@ async def compute_sha256(filepath: str) -> str:
 
 async def ingest_challenge(
     description: str,
-    name: str,
     upload_dir: str,
+    name: Optional[str] = None,
     files: Optional[list[tuple[str, bytes, str]]] = None,
     target_url: Optional[str] = None,
     target_host: Optional[str] = None,
@@ -46,7 +56,6 @@ async def ingest_challenge(
     input_types: set[str] = {"text"}
 
     if target_url:
-        input_types.add("url")
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.head(target_url, follow_redirects=True)
@@ -64,7 +73,7 @@ async def ingest_challenge(
             async with aiofiles.open(filepath, "wb") as f:
                 await f.write(content)
 
-            mime_type = content_type or magic.from_file(filepath, mime=True)
+            mime_type = content_type or _detect_mime_type(filepath)
             sha256 = await compute_sha256(filepath)
             size = os.path.getsize(filepath)
 
@@ -93,7 +102,7 @@ async def ingest_challenge(
                     filepath = os.path.join(challenge_dir, filename)
                     with open(filepath, "wb") as f:
                         f.write(resp.content)
-                    mime_type = magic.from_file(filepath, mime=True)
+                    mime_type = _detect_mime_type(filepath)
                     sha256 = await compute_sha256(filepath)
                     attachments.append(FileAttachment(
                         filename=filename,
@@ -132,11 +141,12 @@ async def ingest_challenge(
             flag_format = fmt_matches[0].split("{")[0] + "{...}" if "{" in fmt_matches[0] else f"{fmt_matches[0]}"
 
     raw_input_type = "mixed" if len(input_types) > 1 else input_types.pop() if input_types else "text"
+    challenge_name = name or title or description.strip()[:120] or "unnamed-challenge"
 
     manifest = ChallengeManifest(
         challenge_id=challenge_id,
         title=title,
-        name=name,
+        name=challenge_name,
         description=description,
         category=ChallengeCategory.UNKNOWN,
         attachments=attachments,

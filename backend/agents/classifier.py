@@ -7,6 +7,8 @@ from backend.core.state import AgentState
 from backend.memory.session_store import session_store
 from backend.memory.experience_db import experience_db
 from backend.agents.tool_registry import list_tools
+from backend.config.settings import settings
+from backend.services.memory_client import MemoryServiceError, memory_client
 
 
 
@@ -34,6 +36,42 @@ async def classify_node(state: AgentState) -> dict:
             )
         experience_hints += "\n"
 
+    memory_hints = ""
+    if settings.memory_enabled and description.strip():
+        try:
+            memory_result = await memory_client.search_writeups(
+                description[:2000], limit=3, offset=0
+            )
+            memory_items = (
+                memory_result.get("items", [])
+                if isinstance(memory_result, dict)
+                else memory_result
+            )
+            if isinstance(memory_items, list):
+                summaries = []
+                for item in memory_items[:3]:
+                    if not isinstance(item, dict):
+                        continue
+                    name = (
+                        item.get("challengeName")
+                        or item.get("challenge_name")
+                        or item.get("name")
+                        or "untitled challenge"
+                    )
+                    domain = item.get("domain") or "unknown domain"
+                    difficulty = item.get("difficulty") or "unknown difficulty"
+                    source_url = item.get("sourceUrl") or item.get("source_url")
+                    source = f", source: {source_url}" if source_url else ""
+                    summaries.append(f"- {name} ({domain}, {difficulty}{source})")
+                if summaries:
+                    memory_hints = (
+                        "\nRelevant memory writeups (use only as background):\n"
+                        + "\n".join(summaries)
+                        + "\n\n"
+                    )
+        except Exception as error:
+            logger.debug(f"Memory context unavailable during classification: {error}")
+
     prompt = (
         "You are a CTF challenge classifier. Given a challenge description and list of attached files, "
         "determine the challenge category.\n\n"
@@ -47,6 +85,7 @@ async def classify_node(state: AgentState) -> dict:
         "- ai: artificial intelligence, machine learning, neural networks, LLM/chatbot challenges, AI model interactions\n"
         "- misc: anything else, general skills challenges, interactive terminal games, educational simulations\n\n"
         f"{experience_hints}"
+        f"{memory_hints}"
         f"Description:\n{description}\n\n"
         f"Attachments:\n{attachment_info if attachment_info else 'None'}\n"
         f"Target URL: {target_url or 'None'}\n\n"

@@ -32,6 +32,12 @@ _TOOL_LOADERS: dict[str, tuple[str, str]] = {
     "binary_calc": ("backend.tools.general.binary_calc", "BinaryCalcTool"),
     "sqlite_query": ("backend.tools.general.sqlite_query", "SQLiteQueryTool"),
     "file_decoder": ("backend.tools.forensics.file_decoder", "FileDecoderTool"),
+    "memory_search_writeups": ("backend.tools.memory", "MemorySearchWriteupsTool"),
+    "memory_get_writeup": ("backend.tools.memory", "MemoryGetWriteupTool"),
+    "memory_list_domains": ("backend.tools.memory", "MemoryListDomainsTool"),
+    "memory_search_source_documents": ("backend.tools.memory", "MemorySearchSourceDocumentsTool"),
+    "memory_get_source_document": ("backend.tools.memory", "MemoryGetSourceDocumentTool"),
+    "memory_fetch_web_reference": ("backend.tools.memory", "MemoryFetchWebReferenceTool"),
     "password_profiler": ("backend.tools.osint.password_profiler", "PasswordProfilerTool"),
     "cupp": ("backend.tools.osint.cupp_tool", "CuppTool"),
 }

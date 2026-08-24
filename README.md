@@ -55,6 +55,118 @@ http://localhost:8000/docs
 
 The API service uses a Compose profile, so `docker compose up` by itself will not start it. Use `--profile api` for the API server.
 
+### Memory service (Docker)
+
+The memory service is part of the monorepo at `services/memory/`. The two
+canonical input artifacts intentionally remain outside `ctfagent`:
+
+```text
+cyber/
+├── ctfagent/
+│   ├── docker-compose.yml
+│   └── services/memory/
+├── picoctf_writeups_real.csv
+└── github_trees/picoCTF__picoCTF.tar.gz
+```
+
+Run these commands from the `ctfagent/` directory. Docker Compose mounts both
+artifacts read-only into the memory container, runs migrations and imports
+before starting NestJS, and persists PostgreSQL data in the
+`memory_postgres_data` named volume:
+
+```bash
+cp .env.example .env
+mkdir -p data
+cp .env.example data/.env
+# Edit .env and set MEMORY_CSV_PATH and MEMORY_ARCHIVE_PATH to real host files.
+docker compose --profile memory up --build memory
+```
+
+The equivalent PowerShell commands are `Copy-Item .env.example .env`,
+`New-Item -ItemType Directory -Force data`, and
+`Copy-Item .env.example data/.env`. Set `MEMORY_DB_PASSWORD` in `.env` to a
+non-default value outside isolated development; do not commit `.env`.
+
+To start the complete API stack (API, memory, and PostgreSQL), use:
+
+```bash
+docker compose --profile api up --build
+```
+
+The API reaches memory at `http://memory:3000` on the Compose network. The
+memory HTTP API is available from the host at `http://127.0.0.1:3001`; the API
+is at `http://127.0.0.1:8000`. PostgreSQL is bound only to
+`127.0.0.1:5434`. `GET /mcp` is the memory health endpoint, while the
+writeup and reference routes are under `/mcp/writeups` and
+`/mcp/references`.
+
+### Memory service (local Bun workflow)
+
+For a local NestJS process, start only its Compose database first:
+
+```bash
+docker compose --profile memory up -d memory-db
+cd services/memory
+bun install
+```
+
+Set the local connection and source paths, then migrate, import, build, and
+start. If `MEMORY_DB_PASSWORD` is changed in `.env`, use the matching password
+in `DATABASE_URL`:
+
+```bash
+export DATABASE_URL='postgres://memory:memory-local-only@127.0.0.1:5434/memory'
+export CSV_PATH='../../../picoctf_writeups_real.csv'
+export PICOCTF_ARCHIVE_PATH='../../../github_trees/picoCTF__picoCTF.tar.gz'
+bun run db:migrate
+bun run data:import
+bun run build
+bun run start
+```
+
+On PowerShell, use `$env:DATABASE_URL`,
+`$env:CSV_PATH`, and `$env:PICOCTF_ARCHIVE_PATH` for the three environment
+assignments. The local process listens on port `3000` by default; stop it
+with `Ctrl-C` when finished.
+
+The CSV and archive are migration/import inputs, not generated application
+data. They must be supplied with `MEMORY_CSV_PATH` and `MEMORY_ARCHIVE_PATH`;
+the Compose profile uses `create_host_path: false` so missing files fail before
+the importer starts. The service never writes to those source paths.
+PostgreSQL owns the imported records in the named volume.
+
+### CTFAgent MCP and CLI access
+
+The backend agent tool registry exposes all memory MCP tools to every
+specialized solver agent:
+
+```text
+memory_search_writeups
+memory_get_writeup
+memory_list_domains
+memory_search_source_documents
+memory_get_source_document
+memory_fetch_web_reference
+```
+
+The classifier also uses memory search results as background context. The
+interactive CLI reaches the same JSON-RPC MCP endpoint through:
+
+```text
+/memory search <query>
+/memory get <id>
+/memory domains
+/memory sources <query>
+/memory source <id>
+/memory fetch <https-url>
+```
+
+Set `MEMORY_SERVICE_URL` and `MEMORY_ENABLED=true` in the CTFAgent environment
+after the memory service is running. Memory is disabled by default so regular
+CTFAgent solves do not degrade or pause when the optional service is absent.
+The default local URL is `http://127.0.0.1:3001`; Compose uses
+`http://memory:3000`.
+
 ### Native Linux / WSL
 
 Use the native installer if you are on Linux or WSL2 and want CTFAgent installed directly on that environment.
