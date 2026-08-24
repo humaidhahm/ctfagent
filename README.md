@@ -79,6 +79,7 @@ cp .env.example .env
 mkdir -p data
 cp .env.example data/.env
 # Edit .env and set MEMORY_CSV_PATH and MEMORY_ARCHIVE_PATH to real host files.
+# Set MEMORY_ENABLED=true only after the memory service is running.
 docker compose --profile memory up --build memory
 ```
 
@@ -92,6 +93,10 @@ To start the complete API stack (API, memory, and PostgreSQL), use:
 ```bash
 docker compose --profile api up --build
 ```
+
+The full API stack requires both memory input files to exist. If either path is
+missing, Compose fails before starting the importer instead of creating empty
+placeholder directories.
 
 The API reaches memory at `http://memory:3000` on the Compose network. The
 memory HTTP API is available from the host at `http://127.0.0.1:3001`; the API
@@ -166,6 +171,39 @@ after the memory service is running. Memory is disabled by default so regular
 CTFAgent solves do not degrade or pause when the optional service is absent.
 The default local URL is `http://127.0.0.1:3001`; Compose uses
 `http://memory:3000`.
+
+### Verification
+
+Run the local checks before opening or merging memory-service changes:
+
+```bash
+pytest
+cd services/memory
+npm test
+npm run build
+npx tsc --noEmit
+npm audit --omit=dev
+cd ../..
+docker compose config
+docker compose --profile memory config
+```
+
+These commands verify the Python agents, memory client, NestJS service tests,
+TypeScript build, production dependency audit, and Compose syntax. They do not
+start Postgres or import picoCTF data. To verify the complete runtime pipeline,
+set `MEMORY_CSV_PATH`, `MEMORY_ARCHIVE_PATH`, and `MEMORY_ENABLED=true`, then
+run:
+
+```bash
+docker compose --profile api up --build
+```
+
+After startup, check `http://127.0.0.1:8000/health` and run a memory lookup
+through either the API or interactive CLI:
+
+```text
+/memory search buffer overflow
+```
 
 ### Native Linux / WSL
 
