@@ -78,6 +78,7 @@ before starting NestJS, and persists PostgreSQL data in the
 cp .env.example .env
 mkdir -p data
 cp .env.example data/.env
+# Edit .env and set MEMORY_CSV_PATH and MEMORY_ARCHIVE_PATH to real host files.
 docker compose --profile memory up --build memory
 ```
 
@@ -129,10 +130,10 @@ assignments. The local process listens on port `3000` by default; stop it
 with `Ctrl-C` when finished.
 
 The CSV and archive are migration/import inputs, not generated application
-data. They must be supplied from the parent workspace (or explicitly
-overridden with `MEMORY_CSV_PATH` and `MEMORY_ARCHIVE_PATH`); the service never
-writes to those source paths. PostgreSQL owns the imported records in the
-named volume.
+data. They must be supplied with `MEMORY_CSV_PATH` and `MEMORY_ARCHIVE_PATH`;
+the Compose profile uses `create_host_path: false` so missing files fail before
+the importer starts. The service never writes to those source paths.
+PostgreSQL owns the imported records in the named volume.
 
 ### CTFAgent MCP and CLI access
 
@@ -160,8 +161,10 @@ interactive CLI reaches the same JSON-RPC MCP endpoint through:
 /memory fetch <https-url>
 ```
 
-Set `MEMORY_SERVICE_URL` and `MEMORY_ENABLED` in the CTFAgent environment. The
-default local URL is `http://127.0.0.1:3001`; Compose uses
+Set `MEMORY_SERVICE_URL` and `MEMORY_ENABLED=true` in the CTFAgent environment
+after the memory service is running. Memory is disabled by default so regular
+CTFAgent solves do not degrade or pause when the optional service is absent.
+The default local URL is `http://127.0.0.1:3001`; Compose uses
 `http://memory:3000`.
 
 ### Native Linux / WSL

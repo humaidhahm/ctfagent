@@ -17,6 +17,7 @@ async def test_memory_client_maps_search_and_retrieval_routes() -> None:
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         memory = MemoryClient(
             base_url="http://memory:3000",
+            enabled=True,
             http_client=client,
         )
         assert await memory.search_writeups("buffer overflow", domain="Pwn") == {
@@ -61,6 +62,7 @@ async def test_memory_client_calls_json_rpc_tool() -> None:
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         result = await MemoryClient(
             base_url="http://memory:3000",
+            enabled=True,
             http_client=client,
         ).call_tool("search_writeups", {"query": "perceptron"})
 

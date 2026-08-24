@@ -9,7 +9,7 @@ services:
       CTFAGENT_DOCKER: "1"
       CTFAGENT_ENV_FILE: /app/data/.env
       MEMORY_SERVICE_URL: http://memory:3000
-      MEMORY_ENABLED: ${MEMORY_ENABLED:-true}
+      MEMORY_ENABLED: ${MEMORY_ENABLED:-false}
       MEMORY_TIMEOUT_SECONDS: ${MEMORY_TIMEOUT_SECONDS:-5}
       MEMORY_API_TOKEN: ${MEMORY_API_TOKEN:-}
     volumes:
@@ -31,7 +31,7 @@ services:
       CTFAGENT_DOCKER: "1"
       CTFAGENT_ENV_FILE: /app/data/.env
       MEMORY_SERVICE_URL: http://memory:3000
-      MEMORY_ENABLED: ${MEMORY_ENABLED:-true}
+      MEMORY_ENABLED: ${MEMORY_ENABLED:-false}
       MEMORY_TIMEOUT_SECONDS: ${MEMORY_TIMEOUT_SECONDS:-5}
       MEMORY_API_TOKEN: ${MEMORY_API_TOKEN:-}
     ports:
@@ -78,8 +78,18 @@ services:
       MEMORY_REQUIRE_AUTH: ${MEMORY_REQUIRE_AUTH:-false}
       MEMORY_CORS_ORIGINS: ${MEMORY_CORS_ORIGINS:-}
     volumes:
-      - ${MEMORY_CSV_PATH:-../picoctf_writeups_real.csv}:/app/data/picoctf_writeups_real.csv:ro
-      - ${MEMORY_ARCHIVE_PATH:-../github_trees/picoCTF__picoCTF.tar.gz}:/app/data/picoCTF__picoCTF.tar.gz:ro
+      - type: bind
+        source: ${MEMORY_CSV_PATH:-./data/missing-picoctf-writeups.csv}
+        target: /app/data/picoctf_writeups_real.csv
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MEMORY_ARCHIVE_PATH:-./data/missing-picoCTF-archive.tar.gz}
+        target: /app/data/picoCTF__picoCTF.tar.gz
+        read_only: true
+        bind:
+          create_host_path: false
     ports:
       - "127.0.0.1:3001:3000"
     depends_on:

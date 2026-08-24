@@ -12,7 +12,7 @@
     "db:migrate": "bun src/database/migrate.ts",
     "data:import": "bun src/ingest/import-data.ts",
     "data:setup": "bun run db:migrate && bun run data:import",
-    "test": "bun test",
+    "test": "jest --runInBand",
     "test:jest": "jest --runInBand"
   },
   "dependencies": {

@@ -144,7 +144,7 @@ MCP tool text is capped at 128 KiB. Direct retrieved records retain their stored
 ```powershell
 bun install
 bun run build
-bun test
+bun run test
 bunx tsc --noEmit
 bun run db:migrate
 ```
