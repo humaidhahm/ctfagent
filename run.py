@@ -99,14 +99,14 @@ TOOLS = [
 
     # Forensics
     ('Forensics', 'binwalk', 'binwalk', None, None),
-    ('Forensics', 'exiftool', 'exiftool', None, None),
+    ('Forensics', 'exiftool', 'libimage-exiftool-perl', None, None),
     ('Forensics', 'steghide', 'steghide', None, None),
     ('Forensics', 'zsteg', None, 'gem:zsteg', None),
     ('Forensics', 'tshark', 'tshark', None, None),
     ('Forensics', 'foremost', 'foremost', None, None),
     ('Forensics', 'hashcat', 'hashcat', None, None),
     ('Forensics', 'john', 'john', None, None),
-    ('Forensics', 'xxd', 'xxd', None, None),
+    ('Forensics', 'xxd', 'vim-common', None, None),
     ('Forensics', 'pngcheck', 'pngcheck', None, None),
     ('Forensics', 'audacity', 'audacity', None, None),
     ('Forensics', 'sleuthkit', 'sleuthkit', None, None),
@@ -125,8 +125,8 @@ TOOLS = [
     ('Pwn', 'strace', 'strace', None, None),
     ('Pwn', 'ltrace', 'ltrace', None, None),
     ('Pwn', 'patchelf', 'patchelf', None, None),
-    ('Pwn', 'ROPgadget', None, 'ROPgadget', 'ROPgadget'),
-    ('Pwn', 'checksec', None, 'checksec.py', 'checksec'),
+    ('Pwn', 'ROPgadget', None, 'ROPgadget', None),
+    ('Pwn', 'checksec', None, 'checksec', 'checksec'),
     ('Pwn', 'pwntools', None, 'pwntools', 'pwn'),
     ('Pwn', 'angr', None, 'angr', 'angr'),
     ('Pwn', 'z3', None, 'z3-solver', 'z3'),
@@ -144,7 +144,7 @@ TOOLS = [
     ('RE', 'pyelftools', None, 'pyelftools', 'elftools'),
     ('RE', 'lief', None, 'lief', 'lief'),
     ('RE', 'capstone', None, 'capstone', 'capstone'),
-    ('RE', 'frida', None, 'frida-tools', 'frida'),
+    ('RE', 'frida', None, 'frida-tools', None),
 
     # Crypto
     ('Crypto', 'openssl', 'openssl', None, None),
@@ -370,12 +370,17 @@ def configured_key_counts(content: str) -> dict[str, int]:
 
 
 def run_cmd(cmd, capture=False, check=False, timeout=120):
-    result = subprocess.run(
-        cmd,
-        capture_output=capture,
-        text=True,
-        timeout=timeout,
-    )
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=capture,
+            text=True,
+            timeout=timeout,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        if check:
+            raise
+        return None
 
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(
@@ -468,7 +473,7 @@ def install_python_deps(python_exe):
             if not p.startswith("gem:")
         ]
         for i, package in enumerate(packages, 1):
-            p_info(f"[{i}/{total}] {package}")
+            p_info(f"[{i}/{len(packages)}] {package}")
 
             r = run_cmd(
                 [
@@ -477,9 +482,13 @@ def install_python_deps(python_exe):
                     "pip",
                     "install",
                     package,
-                ],capture=True,
+                ], capture=True,
                 timeout=180,
             )
+
+            if r is None:
+                p_error(f"Failed (timed out or command not found)")
+                continue
 
             output = (r.stdout or "") + (r.stderr or "")
 
@@ -538,6 +547,11 @@ def install_python_deps(python_exe):
             timeout=120,
         )
 
+        if r is None:
+            p_error(f"Failed (timed out or command not found)")
+            failed.append(pkg)
+            continue
+
         output = (r.stdout or "") + (r.stderr or "")
 
         if r.returncode == 0:
@@ -555,6 +569,7 @@ def install_python_deps(python_exe):
                 if line:
                     p_error(f"    {line}")
                     break
+
 
     print()
     p_info("Python package installation summary")
@@ -591,7 +606,7 @@ def _pip_cmd(pkg):
     # Fallback: system python with override
     return [sys.executable, '-m', 'pip', 'install', '--quiet', '--break-system-packages', pkg]
 
-def install_system_tools():
+def install_system_tools(domain_filter: str | None = None):
     p_header('DOMAIN TOOLKIT INSTALLATION')
 
     has_sudo = shutil.which('sudo') and os.geteuid() != 0
@@ -617,7 +632,8 @@ def install_system_tools():
     _installed_pip = set()
 
     # Install by domain
-    domains = ['Web', 'Forensics', 'Pwn', 'RE', 'Crypto', 'OSINT', 'Misc']
+    all_domains = ['Web', 'Forensics', 'Pwn', 'RE', 'Crypto', 'OSINT', 'Misc']
+    domains = [domain_filter] if domain_filter else all_domains
     for domain in domains:
         domain_tools = [(b, a, p, v) for d, b, a, p, v in TOOLS if d == domain]
         missing = [(b, a, p, v) for b, a, p, v in domain_tools if not check_tool(b, a)]
@@ -626,9 +642,9 @@ def install_system_tools():
 
         installed_count = 0
         for binary, apt_pkg, pip_pkg, verify_import in domain_tools:
+            # Fast path: already present — skip install entirely
             if check_tool(binary, apt_pkg):
-                ver = tool_version(binary)
-                p_tool(domain, binary, True, ver)
+                p_tool(domain, binary, True, 'already installed')
                 installed_count += 1
                 continue
 
@@ -640,21 +656,24 @@ def install_system_tools():
             pip_ok = False
             if pip_pkg and pip_pkg not in _installed_pip:
                 r = run_cmd(_pip_cmd(pip_pkg), timeout=120, capture=True)
-                pip_ok = r and r.returncode == 0
+                pip_ok = r is not None and r.returncode == 0
                 if pip_ok:
                     _installed_pip.add(pip_pkg)
 
             # Install apt package (skip if no apt package name AND pip succeeded for a check-only binary)
             install_pkg = apt_pkg or (binary if not pip_pkg else None)
             if install_pkg:
-                env = os.environ.copy()
-                env['DEBIAN_FRONTEND'] = 'noninteractive'
-                env['NEEDRESTART_MODE'] = 'a'
-                subprocess.run(
-                    _sudo(['apt-get', 'install', '-y', install_pkg]),
-                    timeout=120, env=env,
-                    capture_output=True,
-                )
+                try:
+                    env = os.environ.copy()
+                    env['DEBIAN_FRONTEND'] = 'noninteractive'
+                    env['NEEDRESTART_MODE'] = 'a'
+                    subprocess.run(
+                        _sudo(['apt-get', 'install', '-y', install_pkg]),
+                        timeout=120, env=env,
+                        capture_output=True,
+                    )
+                except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                    pass
 
             # Verify: check binary/apt first, then fall back to import check
             found = check_tool(binary, apt_pkg)
@@ -864,7 +883,7 @@ def check_uptodate():
     return True
 
 
-def run_install_only():
+def run_install_only(domain_filter: str | None = None):
     """Install system tools only (called from CLI 'install' command via sudo)."""
     import shutil
     from pathlib import Path
@@ -879,20 +898,23 @@ def run_install_only():
     if not venv_python.exists():
         venv_python = VENV_DIR / "bin" / "python"
 
-    install_python_deps(str(venv_python))
-    install_system_tools()
-    setup_environment()
-    # Special: pwndbg
-    if not shutil.which('pwndbg') and not (Path('/opt/pwndbg').exists()):
-        p_info('Installing pwndbg from GitHub...')
-        run_cmd(['git', 'clone', '--depth=1',
-                 'https://github.com/pwndbg/pwndbg', '/opt/pwndbg'], timeout=60)
-        if (Path('/opt/pwndbg') / 'setup.sh').exists():
-            run_cmd(['/opt/pwndbg/setup.sh'], timeout=120)
-        if shutil.which('pwndbg'):
-            p_ok('pwndbg installed')
-        else:
-            p_warn('pwndbg setup incomplete (optional)')
+    # Only reinstall Python deps for a full (non-domain-filtered) install
+    if not domain_filter:
+        install_python_deps(str(venv_python))
+    install_system_tools(domain_filter)
+    if not domain_filter:
+        setup_environment()
+        # Special: pwndbg
+        if not shutil.which('pwndbg') and not (Path('/opt/pwndbg').exists()):
+            p_info('Installing pwndbg from GitHub...')
+            run_cmd(['git', 'clone', '--depth=1',
+                     'https://github.com/pwndbg/pwndbg', '/opt/pwndbg'], timeout=60)
+            if (Path('/opt/pwndbg') / 'setup.sh').exists():
+                run_cmd(['/opt/pwndbg/setup.sh'], timeout=120)
+            if shutil.which('pwndbg'):
+                p_ok('pwndbg installed')
+            else:
+                p_warn('pwndbg setup incomplete (optional)')
     verify()
     print(f'\n  {C.CHECK} {C.GREEN}Installation complete!{C.NC}\n')
 

@@ -1412,43 +1412,6 @@ async def cmd_experience(args: str):
 
 
 async def cmd_install(args: str = ""):
-    """Install missing system tools (requires sudo). Captures output to avoid garbled display."""
-    from backend.core.tool_checker import DOMAIN_TOOLS
-
-    parts = args.strip().split(maxsplit=1)
-    filter_domain = parts[0].capitalize() if parts and parts[0] else None
-
-    if filter_domain and filter_domain not in DOMAIN_TOOLS:
-        error_console.print(f"[#F85149]Unknown domain:[/#F85149] '{parts[0]}'. Available: {', '.join(DOMAIN_TOOLS.keys())}")
-        return
-
-    run_py = Path(__file__).resolve().parent.parent / 'run.py'
-
-    console.print("[#9CA3AF]Installing tools...[/#9CA3AF]")
-
-    from run import run_install_only
-
-    try:
-        run_install_only()
-
-        console.print(
-            Panel(
-                "[#3FB950]✔ Installation complete![/#3FB950]",
-                border_style="#3FB950",
-            )
-        )
-    except Exception as e:
-        error_console.print(
-            Panel(
-                f"[#F85149]✗ Installation failed:[/#F85149]\n{e}",
-                border_style="#F85149",
-            )
-        )
-
-    print()  # Separate installer output from the final status.
-
-
-async def cmd_install(args: str = ""):
     """Install missing system tools with themed terminal status panels."""
     from backend.core.tool_checker import DOMAIN_TOOLS
 
@@ -1478,7 +1441,7 @@ async def cmd_install(args: str = ""):
     from run import run_install_only
 
     try:
-        run_install_only()
+        run_install_only(domain_filter)
         console.print(terminal_panel(
             f"[#9CA3AF]Target[/#9CA3AF] : [#E6EDF3]{target}[/#E6EDF3]\n"
             "[#9CA3AF]Status[/#9CA3AF] : [#3FB950]complete[/#3FB950]\n\n"
