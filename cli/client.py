@@ -1474,7 +1474,7 @@ REPRESENTATIVE_TOOLS = {
 async def check_missing_tools():
     """Check for missing tools — spot-check 1 tool per domain for fast startup."""
     import shutil
-    from backend.core.tool_checker import DOMAIN_TOOLS
+    from backend.core.tool_checker import DOMAIN_TOOLS, check_tool_installed
 
     missing_by_domain = {}
     total_missing = 0
@@ -1486,14 +1486,15 @@ async def check_missing_tools():
     # If all rep tools found, skip exhaustive check
     if total_missing == 0:
         return
-    # Only if something missing, do full scan
+    # Only if something missing, do full scan using tool_checker (supports import fallbacks)
     missing_by_domain = {}
     total_missing = 0
     for domain, tools in DOMAIN_TOOLS.items():
-        missing = [t for t in tools if not shutil.which(t)]
+        missing = [t for t in tools if not check_tool_installed(t)]
         if missing:
             missing_by_domain[domain] = missing
             total_missing += len(missing)
+
 
     if total_missing == 0:
         return
