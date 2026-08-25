@@ -648,36 +648,43 @@ def install_system_tools(domain_filter: str | None = None):
                 installed_count += 1
                 continue
 
-            if not (is_root or has_sudo):
-                p_tool(domain, binary, False, 'no root')
-                continue
-
-            # Install pip package if applicable (skip if already installed via Python deps)
+            # Install pip package first — never needs root (goes into venv)
             pip_ok = False
-            if pip_pkg and pip_pkg not in _installed_pip:
+            if pip_pkg and not pip_pkg.startswith('gem:') and pip_pkg not in _installed_pip:
                 r = run_cmd(_pip_cmd(pip_pkg), timeout=120, capture=True)
                 pip_ok = r is not None and r.returncode == 0
                 if pip_ok:
                     _installed_pip.add(pip_pkg)
+            elif pip_pkg and pip_pkg.startswith('gem:'):
+                # Gem installs: treat like pip for tracking
+                if pip_pkg not in _installed_pip:
+                    r = run_cmd(_pip_cmd(pip_pkg), timeout=120, capture=True)
+                    pip_ok = r is not None and r.returncode == 0
+                    if pip_ok:
+                        _installed_pip.add(pip_pkg)
 
-            # Install apt package (skip if no apt package name AND pip succeeded for a check-only binary)
-            install_pkg = apt_pkg or (binary if not pip_pkg else None)
+            # Install apt package — needs root or sudo
+            install_pkg = apt_pkg
             if install_pkg:
-                try:
-                    env = os.environ.copy()
-                    env['DEBIAN_FRONTEND'] = 'noninteractive'
-                    env['NEEDRESTART_MODE'] = 'a'
-                    subprocess.run(
-                        _sudo(['apt-get', 'install', '-y', install_pkg]),
-                        timeout=120, env=env,
-                        capture_output=True,
-                    )
-                except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-                    pass
+                if not (is_root or has_sudo):
+                    p_tool(domain, binary, False, 'no root (apt)')
+                    # Still fall through to verify in case pip covered it
+                else:
+                    try:
+                        env = os.environ.copy()
+                        env['DEBIAN_FRONTEND'] = 'noninteractive'
+                        env['NEEDRESTART_MODE'] = 'a'
+                        subprocess.run(
+                            _sudo(['apt-get', 'install', '-y', install_pkg]),
+                            timeout=120, env=env,
+                            capture_output=True,
+                        )
+                    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                        pass
 
             # Verify: check binary/apt first, then fall back to import check
             found = check_tool(binary, apt_pkg)
-            if not found and pip_pkg:
+            if not found and pip_pkg and not pip_pkg.startswith('gem:'):
                 import_names = []
                 if verify_import:
                     import_names.append(verify_import)
@@ -698,8 +705,11 @@ def install_system_tools(domain_filter: str | None = None):
             elif pip_ok:
                 p_tool(domain, binary, True, 'pip OK (no binary)')
                 installed_count += 1
+            elif apt_pkg and not (is_root or has_sudo):
+                pass  # already printed 'no root (apt)' above
             else:
                 p_tool(domain, binary, False, 'install FAILED')
+
 
         # Show progress bar
         total = len(domain_tools)

@@ -1441,7 +1441,7 @@ async def cmd_install(args: str = ""):
     from run import run_install_only
 
     try:
-        run_install_only(domain_filter)
+        run_install_only(filter_domain)
         console.print(terminal_panel(
             f"[#9CA3AF]Target[/#9CA3AF] : [#E6EDF3]{target}[/#E6EDF3]\n"
             "[#9CA3AF]Status[/#9CA3AF] : [#3FB950]complete[/#3FB950]\n\n"
