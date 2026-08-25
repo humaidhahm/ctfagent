@@ -385,11 +385,11 @@ def print_help():
 
 
 BANNER = r"""
-[bold #00E5FF]   ______ _______ ______    _____  ____  _    __ ______ _____
-  / ____//_  __// ____/   / ___/ / __ \| |  / // ____// ___/
- / /      / /  / /_       \__ \ / / / /| | / // __/   \__ \
-/ /___   / /  / __/      ___/ // /_/ / | |/ // /___  ___/ /
-\____/  /_/  /_/        /____/ \____/  |___//_____/ /____/ [/bold #00E5FF]"""[1:]
+[bold #00E5FF]   __________________   _____ ____  __ _    ____________ 
+  / ____/_  __/ ____/  / ___// __ \/ /| |  / / ____/ __ \
+ / /     / / / /_      \__ \/ / / / / | | / / __/ / /_/ /
+/ /___  / / / __/     ___/ / /_/ / /__| |/ / /___/ _, _/ 
+\____/ /_/ /_/       /____/\____/_____/___/_____/_/ |_|  [/bold #00E5FF]"""[1:]
 
 TAGLINE = "[bold #00E5FF]AI Ethical Hacking Terminal  //  CTF Solver  //  v1.0.0[/bold #00E5FF]"
 
@@ -1574,28 +1574,6 @@ async def check_missing_tools():
     ))
     console.print()
     return
-
-    console.print()
-    lines = []
-    for d, m in sorted(missing_by_domain.items()):
-        c = DOMAIN_COLORS.get(d.lower(), "#E6EDF3")
-        tools_str = ", ".join(sorted(m))
-        lines.append(f"  [{c}]▸ {d}:[/] [#9CA3AF]{tools_str}[/#9CA3AF]")
-    body = "\n".join(lines)
-
-    help_table = Table(show_header=False, box=None, padding=(0, 2, 0, 0))
-    help_table.add_column("Cmd", style="#3FB950", no_wrap=True)
-    help_table.add_column("Desc", style="#9CA3AF")
-    help_table.add_row("install", "Install all missing tools (sudo)")
-    help_table.add_row("install <domain>", "Install tools for a specific domain")
-    help_table.add_row("tools", "Check which tools are available")
-
-    console.print(Panel(
-        f"[bold #D29922]{total_missing} tools not installed[/bold #D29922]\n\n{body}\n\n[#9CA3AF]Some functionality may be limited.[/#9CA3AF]",
-        border_style="#D29922",
-        title="[bold #D29922]⚠ MISSING TOOLS[/bold #D29922]",
-    ))
-    console.print()
 
 
 async def cmd_tools(args: str = ""):
