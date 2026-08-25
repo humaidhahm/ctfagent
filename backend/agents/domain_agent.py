@@ -8,6 +8,7 @@ from backend.core.llm_client import get_llm
 from backend.core.state import AgentState
 from backend.core.flag_detector import detect_flag, validate_flag
 from backend.agents.tool_registry import get_tool
+from backend.config.settings import settings
 from backend.memory.experience_db import experience_db
 
 
