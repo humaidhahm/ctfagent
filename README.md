@@ -1,29 +1,54 @@
-# CTFAgent
+<p align="center">
+<a href="https://dscvit.com">
+	<img width="200" src="https://res.cloudinary.com/startup-grind/image/upload/c_fill,dpr_2.0,f_auto,g_center,h_1200,q_100,w_1200/v1/gcs/platform-data-goog/contentbuilder/GDG_Bevy_SocialSharingThumbnail_KFxxrrs.png" alt="GDG VIT"/>
+</a>
+	<h2 align="center">CTFAgent</h2>
+	<h4 align="center">AI-powered multi-agent CTF solver that autonomously solves Capture The Flag challenges across multiple categories.</h4>
 
-AI-powered multi-agent CTF solver that autonomously solves Capture The Flag challenges across multiple categories: Web, Pwn, Reverse Engineering, Forensics, Crypto, OSINT, and General Skills.
+
+---
+
+[![Join Us](https://img.shields.io/badge/Join%20Us-Developer%20Student%20Clubs-red)](https://gdg.community.dev/gdg-on-campus-vellore-institute-of-technology-vellore-india/)
+
+[![DOCS](https://img.shields.io/badge/Documentation-see%20docs-green?style=flat-square&logo=appveyor)](#usage)
+[![UI ](https://img.shields.io/badge/User%20Interface-CLI-orange?style=flat-square&logo=appveyor)](#usage)
 
 ## Features
 
-- **Multi-agent architecture** — specialized agents for each CTF domain, coordinated by a supervisor
-- **LLM-powered reasoning** — uses NVIDIA NIM API for AI reasoning with automatic model selection
-- **Session persistence** — maintains netcat/TCP sessions for interactive challenges
-- **Experience database** — learns from past solves; workflows are reused on similar challenges
-- **28+ built-in tools** — SQLMap, Gobuster, pwntools, binwalk, steghide, zsteg, ROPgadget, and more
-- **Automatic setup** — installs system tools and Python dependencies by domain
-- **RAG knowledge base** — category-specific hacking guides included
+- [x] **Multi-agent architecture** — specialized agents for each CTF domain, coordinated by a supervisor
+- [x] **LLM-powered reasoning** — uses NVIDIA NIM API for AI reasoning with automatic model selection
+- [x] **Session persistence** — maintains netcat/TCP sessions for interactive challenges
+- [x] **Experience database** — learns from past solves; workflows are reused on similar challenges
+- [x] **28+ built-in tools** — SQLMap, Gobuster, pwntools, binwalk, steghide, zsteg, ROPgadget, and more
+- [x] **Automatic setup** — installs system tools and Python dependencies by domain
+- [x] **RAG knowledge base** — category-specific hacking guides included
+- [x] **Memory service** — optional writeup/reference retrieval backed by PostgreSQL and NestJS
+- [x] **Docker support** — reproducible setup for macOS, Windows without WSL/Linux, and other environments where native Linux tools are inconvenient
+- [x] **Interactive solve and hint modes** — solve challenges directly or receive progressive hints
 
-## Quick Start
+<br>
 
-### Docker (recommended for macOS and Windows without WSL/Linux)
+## Dependencies
 
-Use Docker if you are on macOS, on Windows without WSL2, or on a system where installing Linux CTF tools directly is inconvenient. The Docker image includes the Debian/apt-based tools that CTFAgent needs, including tools such as SQLMap, Gobuster, ffuf, binwalk, steghide, tshark, pwntools, ROPgadget, and zsteg.
+- Docker Desktop for macOS, Windows without WSL/Linux, and non-Debian systems
+- Python 3.8+ for native Linux/WSL installs
+- Linux or WSL2 for native installs
+- NVIDIA NIM API key — available from [NVIDIA NIM](https://build.nvidia.com/)
+- sudo access for native system-tool installation
+- Docker BuildKit for the recommended Docker workflow
+- For the optional memory service:
+  - PostgreSQL
+  - Bun for the local development workflow
+  - `picoctf_writeups_real.csv`
+  - `github_trees/picoCTF__picoCTF.tar.gz`
 
-Install Docker Desktop first:
+## Running
 
-- macOS: install Docker Desktop for Mac
-- Windows without WSL/Linux: install Docker Desktop for Windows and run these commands from PowerShell, Windows Terminal, Git Bash, or another terminal with Docker available
+### Docker — Recommended
 
-Then run CTFAgent:
+Use Docker if you are on macOS, on Windows without WSL2, or on a system where installing Linux CTF tools directly is inconvenient. The Docker image includes Debian/apt-based tools such as SQLMap, Gobuster, ffuf, binwalk, steghide, tshark, pwntools, ROPgadget, and zsteg.
+
+Install Docker Desktop first, then:
 
 ```bash
 git clone https://github.com/yourusername/ctfagent.git
@@ -33,7 +58,7 @@ DOCKER_BUILDKIT=1 docker build -t ctfagent .
 docker compose run --rm ctfagent
 ```
 
-The Dockerfile uses BuildKit cache mounts for pip, so unchanged Python packages are reused across rebuilds when BuildKit is enabled. The first interactive Docker run prompts for your API keys/provider and writes configuration to `data/.env`. Compose mounts that file into the container, so your setup persists across container rebuilds and restarts.
+The first interactive Docker run prompts for your API keys/provider and writes configuration to `data/.env`. Compose mounts that file into the container, so the setup persists across container rebuilds and restarts.
 
 To run the CLI again later:
 
@@ -41,7 +66,7 @@ To run the CLI again later:
 docker compose run --rm ctfagent
 ```
 
-To start the API after completing the interactive CLI setup:
+To start the API:
 
 ```bash
 docker compose --profile api up
@@ -53,12 +78,11 @@ Then open:
 http://localhost:8000/docs
 ```
 
-The API service uses a Compose profile, so `docker compose up` by itself will not start it. Use `--profile api` for the API server.
+The API service uses a Compose profile, so `docker compose up` by itself does not start it. Use `--profile api` for the API server.
 
-### Memory service (Docker)
+### Memory Service — Docker
 
-The memory service is part of the monorepo at `services/memory/`. The two
-canonical input artifacts intentionally remain outside `ctfagent`:
+The memory service is part of the monorepo at `services/memory/`. The two canonical input artifacts intentionally remain outside `ctfagent`:
 
 ```text
 cyber/
@@ -69,10 +93,7 @@ cyber/
 └── github_trees/picoCTF__picoCTF.tar.gz
 ```
 
-Run these commands from the `ctfagent/` directory. Docker Compose mounts both
-artifacts read-only into the memory container, runs migrations and imports
-before starting NestJS, and persists PostgreSQL data in the
-`memory_postgres_data` named volume:
+Run these commands from the `ctfagent/` directory:
 
 ```bash
 cp .env.example .env
@@ -83,29 +104,35 @@ cp .env.example data/.env
 docker compose --profile memory up --build memory
 ```
 
-The equivalent PowerShell commands are `Copy-Item .env.example .env`,
-`New-Item -ItemType Directory -Force data`, and
-`Copy-Item .env.example data/.env`. Set `MEMORY_DB_PASSWORD` in `.env` to a
-non-default value outside isolated development; do not commit `.env`.
+On PowerShell, the equivalent commands are:
 
-To start the complete API stack (API, memory, and PostgreSQL), use:
+```powershell
+Copy-Item .env.example .env
+New-Item -ItemType Directory -Force data
+Copy-Item .env.example data/.env
+```
+
+Set `MEMORY_DB_PASSWORD` in `.env` to a non-default value outside isolated development. Do not commit `.env`.
+
+To start the complete API stack:
 
 ```bash
 docker compose --profile api up --build
 ```
 
-The full API stack requires both memory input files to exist. If either path is
-missing, Compose fails before starting the importer instead of creating empty
-placeholder directories.
+The full API stack requires both memory input files to exist. If either path is missing, Compose fails before starting the importer instead of creating empty placeholder directories.
 
-The API reaches memory at `http://memory:3000` on the Compose network. The
-memory HTTP API is available from the host at `http://127.0.0.1:3001`; the API
-is at `http://127.0.0.1:8000`. PostgreSQL is bound only to
-`127.0.0.1:5434`. `GET /mcp` is the memory health endpoint, while the
-writeup and reference routes are under `/mcp/writeups` and
-`/mcp/references`.
+The API reaches memory at `http://memory:3000` on the Compose network. The memory HTTP API is available from the host at `http://127.0.0.1:3001`; the API is at `http://127.0.0.1:8000`. PostgreSQL is bound only to `127.0.0.1:5434`.
 
-### Memory service (local Bun workflow)
+Memory endpoints:
+
+```text
+GET /mcp
+/mcp/writeups
+/mcp/references
+```
+
+### Memory Service — Local Bun Workflow
 
 For a local NestJS process, start only its Compose database first:
 
@@ -115,9 +142,7 @@ cd services/memory
 bun install
 ```
 
-Set the local connection and source paths, then migrate, import, build, and
-start. If `MEMORY_DB_PASSWORD` is changed in `.env`, use the matching password
-in `DATABASE_URL`:
+Set the local connection and source paths, then migrate, import, build, and start:
 
 ```bash
 export DATABASE_URL='postgres://memory:memory-local-only@127.0.0.1:5434/memory'
@@ -129,21 +154,15 @@ bun run build
 bun run start
 ```
 
-On PowerShell, use `$env:DATABASE_URL`,
-`$env:CSV_PATH`, and `$env:PICOCTF_ARCHIVE_PATH` for the three environment
-assignments. The local process listens on port `3000` by default; stop it
-with `Ctrl-C` when finished.
+On PowerShell, use `$env:DATABASE_URL`, `$env:CSV_PATH`, and `$env:PICOCTF_ARCHIVE_PATH`.
 
-The CSV and archive are migration/import inputs, not generated application
-data. They must be supplied with `MEMORY_CSV_PATH` and `MEMORY_ARCHIVE_PATH`;
-the Compose profile uses `create_host_path: false` so missing files fail before
-the importer starts. The service never writes to those source paths.
-PostgreSQL owns the imported records in the named volume.
+The local process listens on port `3000` by default. Stop it with `Ctrl-C`.
 
-### CTFAgent MCP and CLI access
+The CSV and archive are migration/import inputs, not generated application data. They must be supplied with `MEMORY_CSV_PATH` and `MEMORY_ARCHIVE_PATH`. The Compose profile uses `create_host_path: false` so missing files fail before the importer starts. The service never writes to those source paths. PostgreSQL owns the imported records in the named volume.
 
-The backend agent tool registry exposes all memory MCP tools to every
-specialized solver agent:
+### CTFAgent MCP and CLI Access
+
+The backend agent tool registry exposes all memory MCP tools to every specialized solver agent:
 
 ```text
 memory_search_writeups
@@ -154,8 +173,9 @@ memory_get_source_document
 memory_fetch_web_reference
 ```
 
-The classifier also uses memory search results as background context. The
-interactive CLI reaches the same JSON-RPC MCP endpoint through:
+The classifier also uses memory search results as background context.
+
+The interactive CLI reaches the same JSON-RPC MCP endpoint through:
 
 ```text
 /memory search <query>
@@ -166,11 +186,33 @@ interactive CLI reaches the same JSON-RPC MCP endpoint through:
 /memory fetch <https-url>
 ```
 
-Set `MEMORY_SERVICE_URL` and `MEMORY_ENABLED=true` in the CTFAgent environment
-after the memory service is running. Memory is disabled by default so regular
-CTFAgent solves do not degrade or pause when the optional service is absent.
-The default local URL is `http://127.0.0.1:3001`; Compose uses
-`http://memory:3000`.
+Set `MEMORY_SERVICE_URL` and `MEMORY_ENABLED=true` in the CTFAgent environment after the memory service is running. Memory is disabled by default so regular CTFAgent solves do not degrade or pause when the optional service is absent.
+
+The default local URL is `http://127.0.0.1:3001`; Compose uses `http://memory:3000`.
+
+### Native Linux / WSL
+
+Use the native installer on Linux or WSL2 when you want CTFAgent installed directly into that environment.
+
+```bash
+git clone https://github.com/humaidhahm/ctfagent
+cd ctfagent
+python3 run.py
+```
+
+On first run, the installer:
+
+1. Creates a Python virtual environment (`.venv`) to avoid the `externally-managed-environment` error on newer Debian/Ubuntu releases.
+2. Installs all Python dependencies inside the virtual environment.
+3. Installs missing system tools, which requires sudo.
+4. Prompts for your NVIDIA NIM API key.
+5. Launches the interactive CLI.
+
+If your system Python lacks `venv` support:
+
+```bash
+sudo apt install python3-venv
+```
 
 ### Verification
 
@@ -188,64 +230,37 @@ docker compose config
 docker compose --profile memory config
 ```
 
-These commands verify the Python agents, memory client, NestJS service tests,
-TypeScript build, production dependency audit, and Compose syntax. They do not
-start Postgres or import picoCTF data. To verify the complete runtime pipeline,
-set `MEMORY_CSV_PATH`, `MEMORY_ARCHIVE_PATH`, and `MEMORY_ENABLED=true`, then
-run:
+These commands verify the Python agents, memory client, NestJS service tests, TypeScript build, production dependency audit, and Compose syntax. They do not start Postgres or import picoCTF data.
+
+To verify the complete runtime pipeline, set `MEMORY_CSV_PATH`, `MEMORY_ARCHIVE_PATH`, and `MEMORY_ENABLED=true`, then run:
 
 ```bash
 docker compose --profile api up --build
 ```
 
-After startup, check `http://127.0.0.1:8000/health` and run a memory lookup
-through either the API or interactive CLI:
+After startup, check:
+
+```text
+http://127.0.0.1:8000/health
+```
+
+Then run a memory lookup through the API or interactive CLI:
 
 ```text
 /memory search buffer overflow
 ```
-
-### Native Linux / WSL
-
-Use the native installer if you are on Linux or WSL2 and want CTFAgent installed directly on that environment.
-
-```bash
-git clone https://github.com/humaidhahm/ctfagent
-cd ctfagent
-python3 run.py
-```
-
-On first run, the installer will:
-1. Create a Python virtual environment (`.venv`) — this avoids the *"externally-managed-environment"* error on newer Debian/Ubuntu releases that block system-wide `pip` installs
-2. Install all Python dependencies inside the virtual environment
-3. Install missing system tools (requires sudo)
-4. Prompt you for your NVIDIA NIM API key
-5. Launch the interactive CLI
-
-> **Note:** If your system Python lacks `venv` support, install it first: `sudo apt install python3-venv`
-
-## Requirements
-
-- **Docker Desktop** for macOS, Windows without WSL/Linux, and non-Debian systems
-- **Python 3.8+** for native Linux/WSL installs
-- **Linux** or WSL2 for native installs
-- **NVIDIA NIM API key** — get one free at [build.nvidia.com](https://build.nvidia.com/)
-- **sudo access** for native system tool installation
 
 ## Usage
 
 The CLI supports two modes:
 
 ### Solve Mode
-```
-Enter the challenge description, paste a URL, or upload a file.
-The agent will classify the challenge, select the right tools, and work through it step by step.
-```
+
+Enter the challenge description, paste a URL, or upload a file. The agent classifies the challenge, selects the appropriate tools, and works through it step by step.
 
 ### Hint Mode
-```
+
 Get a progressive hint without spoiling the full solution.
-```
 
 ### Commands
 
@@ -262,7 +277,7 @@ Get a progressive hint without spoiling the full solution.
 
 ## Architecture
 
-```
+```text
 CLI (cli/client.py)
   └── Supervisor (backend/agents/supervisor.py)
         ├── Classifier — identifies challenge category
@@ -273,19 +288,25 @@ CLI (cli/client.py)
         │     ├── RE Agent
         │     ├── Forensics Agent
         │     ├── Crypto Agent
-        │     ├── OSINT/Misc Agent
+        │     └── OSINT/Misc Agent
         └── Flag Validator — detects and validates flags
 ```
 
 ## Tools by Category
 
-**Web:** sqlmap, ffuf, curl_probe, gobuster
-**Forensics:** binwalk, exiftool, steghide, zsteg, tshark, file_decoder, foremost
-**Pwn:** pwntools, checksec, ROPgadget, remote_connect, heartbleed
-**RE:** radare2, strings
-**Crypto:** cipher_cracker, rsa_solver, encoding_detector
-**OSINT:** password_profiler, cupp
-**General:** download_file, file_reader, binary_calc
+**Web:** `sqlmap`, `ffuf`, `curl_probe`, `gobuster`
+
+**Forensics:** `binwalk`, `exiftool`, `steghide`, `zsteg`, `tshark`, `file_decoder`, `foremost`
+
+**Pwn:** `pwntools`, `checksec`, `ROPgadget`, `remote_connect`, `heartbleed`
+
+**RE:** `radare2`, `strings`
+
+**Crypto:** `cipher_cracker`, `rsa_solver`, `encoding_detector`
+
+**OSINT:** `password_profiler`, `cupp`
+
+**General:** `download_file`, `file_reader`, `binary_calc`
 
 ## Configuration
 
@@ -297,7 +318,7 @@ For the Docker interactive CLI, attach stdin and a TTY:
 docker compose run --rm ctfagent
 ```
 
-You can also copy `.env.example` to the relevant env file and configure it manually:
+You can also copy `.env.example` to the relevant environment file and configure it manually:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -305,15 +326,35 @@ You can also copy `.env.example` to the relevant env file and configure it manua
 | `NVIDIA_NIM_API_KEYS` | For NIM | Comma-separated NVIDIA NIM API keys |
 | `NVIDIA_NIM_BASE_URL` | No | Base URL for NIM API |
 | `GOOGLE_API_KEYS` | For Gemma/Gemini | Comma-separated Google AI API keys |
-| `GOOGLE_MIN_REQUEST_INTERVAL_SECONDS` | No | Delay between Google LLM requests (default: 1.0) |
-| `MAX_AGENT_ITERATIONS` | No | Max solve attempts (default: 20) |
-| `FLAG_FORMAT` | No | Flag prefix (e.g. picoCTF, CTF) |
+| `GOOGLE_MIN_REQUEST_INTERVAL_SECONDS` | No | Delay between Google LLM requests; default: `1.0` |
+| `MAX_AGENT_ITERATIONS` | No | Maximum solve attempts; default: `20` |
+| `FLAG_FORMAT` | No | Flag prefix, e.g. `picoCTF` or `CTF` |
+| `MEMORY_SERVICE_URL` | For memory | Memory service URL; default local URL: `http://127.0.0.1:3001` |
+| `MEMORY_ENABLED` | No | Enables the optional memory service |
 
-Gemini/Gemma rate limits are quota-based at the Google project level. Multiple
-keys from the same project share that quota; use `/llm` to reconfigure keys and
-check the configured key count shown at startup. If your keys are from the same
-project, increase `GOOGLE_MIN_REQUEST_INTERVAL_SECONDS` to avoid shared quota
-bursts.
+Gemini/Gemma rate limits are quota-based at the Google project level. Multiple keys from the same project share that quota. Use `/llm` to reconfigure keys and check the configured key count shown at startup. If keys are from the same project, increase `GOOGLE_MIN_REQUEST_INTERVAL_SECONDS` to avoid shared quota bursts.
+
+## Contributors
+
+<table>
+	<tr align="center">
+		<td>
+			CTFAgent Contributors
+			<p align="center">
+				<img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS2wTcTBKlN8lIbQQtmdxzt4-U6VqS3S6ZAk14xWbaEvg&s" width="150" height="150" alt="GDG VIT"/>
+			</p>
+			<p align="center">
+				<a href="https://github.com/humaidhahm/ctfagent">
+					<img src="https://uxwing.com/wp-content/themes/uxwing/download/brands-and-social-media/github-white-icon.png" width="36" height="36" alt="GitHub"/>
+				</a>
+			</p>
+		</td>
+	</tr>
+</table>
+
+<p align="center">
+	Made with ❤ by <a href="https://dscvit.com">GDG-VIT</a>
+</p>
 
 ## License
 
