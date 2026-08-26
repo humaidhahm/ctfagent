@@ -33,7 +33,8 @@
 - Docker Desktop for macOS, Windows without WSL/Linux, and non-Debian systems
 - Python 3.8+ for native Linux/WSL installs
 - Linux or WSL2 for native installs
-- NVIDIA NIM API key — available from [NVIDIA NIM](https://build.nvidia.com/)
+- NVIDIA NIM API key — available from [NVIDIA NIM](https://build.nvidia.com/) 
+- Google API key - available at [AI Studio](https://aistudio.google.com/api-keys)
 - sudo access for native system-tool installation
 - Docker BuildKit for the recommended Docker workflow
 - For the optional memory service:
