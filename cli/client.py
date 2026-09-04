@@ -385,10 +385,10 @@ def print_help():
 
 
 BANNER = r"""
-[bold #00E5FF]   __________________   _____ ____  __ _    ____________ 
+[bold #00E5FF]   __________________   _____ ____  __ _    ____________
   / ____/_  __/ ____/  / ___// __ \/ /| |  / / ____/ __ \
  / /     / / / /_      \__ \/ / / / / | | / / __/ / /_/ /
-/ /___  / / / __/     ___/ / /_/ / /__| |/ / /___/ _, _/ 
+/ /___  / / / __/     ___/ / /_/ / /__| |/ / /___/ _, _/
 \____/ /_/ /_/       /____/\____/_____/___/_____/_/ |_|  [/bold #00E5FF]"""[1:]
 
 TAGLINE = "[bold #00E5FF]AI Ethical Hacking Terminal  //  CTF Solver  //  v1.0.0[/bold #00E5FF]"
@@ -1412,43 +1412,6 @@ async def cmd_experience(args: str):
 
 
 async def cmd_install(args: str = ""):
-    """Install missing system tools (requires sudo). Captures output to avoid garbled display."""
-    from backend.core.tool_checker import DOMAIN_TOOLS
-
-    parts = args.strip().split(maxsplit=1)
-    filter_domain = parts[0].capitalize() if parts and parts[0] else None
-
-    if filter_domain and filter_domain not in DOMAIN_TOOLS:
-        error_console.print(f"[#F85149]Unknown domain:[/#F85149] '{parts[0]}'. Available: {', '.join(DOMAIN_TOOLS.keys())}")
-        return
-
-    run_py = Path(__file__).resolve().parent.parent / 'run.py'
-
-    console.print("[#9CA3AF]Installing tools...[/#9CA3AF]")
-
-    from run import run_install_only
-
-    try:
-        run_install_only()
-
-        console.print(
-            Panel(
-                "[#3FB950]✔ Installation complete![/#3FB950]",
-                border_style="#3FB950",
-            )
-        )
-    except Exception as e:
-        error_console.print(
-            Panel(
-                f"[#F85149]✗ Installation failed:[/#F85149]\n{e}",
-                border_style="#F85149",
-            )
-        )
-
-    print()  # Separate installer output from the final status.
-
-
-async def cmd_install(args: str = ""):
     """Install missing system tools with themed terminal status panels."""
     from backend.core.tool_checker import DOMAIN_TOOLS
 
@@ -1478,7 +1441,7 @@ async def cmd_install(args: str = ""):
     from run import run_install_only
 
     try:
-        run_install_only()
+        run_install_only(filter_domain)
         console.print(terminal_panel(
             f"[#9CA3AF]Target[/#9CA3AF] : [#E6EDF3]{target}[/#E6EDF3]\n"
             "[#9CA3AF]Status[/#9CA3AF] : [#3FB950]complete[/#3FB950]\n\n"
@@ -1511,7 +1474,7 @@ REPRESENTATIVE_TOOLS = {
 async def check_missing_tools():
     """Check for missing tools — spot-check 1 tool per domain for fast startup."""
     import shutil
-    from backend.core.tool_checker import DOMAIN_TOOLS
+    from backend.core.tool_checker import DOMAIN_TOOLS, check_tool_installed
 
     missing_by_domain = {}
     total_missing = 0
@@ -1523,14 +1486,15 @@ async def check_missing_tools():
     # If all rep tools found, skip exhaustive check
     if total_missing == 0:
         return
-    # Only if something missing, do full scan
+    # Only if something missing, do full scan using tool_checker (supports import fallbacks)
     missing_by_domain = {}
     total_missing = 0
     for domain, tools in DOMAIN_TOOLS.items():
-        missing = [t for t in tools if not shutil.which(t)]
+        missing = [t for t in tools if not check_tool_installed(t)]
         if missing:
             missing_by_domain[domain] = missing
             total_missing += len(missing)
+
 
     if total_missing == 0:
         return
