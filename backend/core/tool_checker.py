@@ -1,6 +1,8 @@
 import shutil
 import subprocess
+import sys
 import time
+from pathlib import Path
 from typing import Optional
 from loguru import logger
 
@@ -81,6 +83,23 @@ _TOOL_CACHE: dict[str, tuple[str | None, float]] = {}
 _CACHE_TTL = 30.0
 
 
+def _python_candidates() -> list[str]:
+    candidates = [sys.executable]
+    repo_root = Path(__file__).resolve().parents[2]
+    for python_path in (
+        repo_root / ".venv" / "bin" / "python3",
+        repo_root / ".venv" / "bin" / "python",
+    ):
+        if python_path.exists():
+            candidates.append(str(python_path))
+
+    path_python = shutil.which("python3")
+    if path_python:
+        candidates.append(path_python)
+
+    return list(dict.fromkeys(candidates))
+
+
 def _cached_check(name: str, force_refresh: bool = False) -> str | None:
     now = time.monotonic()
     if not force_refresh:
@@ -94,16 +113,18 @@ def _cached_check(name: str, force_refresh: bool = False) -> str | None:
     # Fallback: Python import check for library-only tools
     if path is None and name in IMPORT_FALLBACKS:
         module = IMPORT_FALLBACKS[name]
-        try:
-            result = subprocess.run(
-                [shutil.which("python3") or "python3", "-c", f"import {module}"],
-                capture_output=True,
-                timeout=5,
-            )
-            if result.returncode == 0:
-                path = f"<python:{module}>"
-        except Exception:
-            pass
+        for python_exe in _python_candidates():
+            try:
+                result = subprocess.run(
+                    [python_exe, "-c", f"import {module}"],
+                    capture_output=True,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    path = f"<python:{module}>"
+                    break
+            except Exception:
+                pass
 
     version: str | None = path if path else None
     _TOOL_CACHE[name] = (version, now)
